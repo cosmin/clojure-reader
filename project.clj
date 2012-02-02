@@ -1,3 +1,3 @@
 (defproject clojurereader "1.0.0-SNAPSHOT"
-  :description "FIXME: write description"
-  :dependencies [[org.clojure/clojure "1.3.0"]])
+  :description "A Clojure reader implemented in Clojure"
+  :dependencies [[org.clojure/clojure "1.4.0-alpha5"]])
