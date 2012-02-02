@@ -5,24 +5,122 @@
         [clojure-reader.symbols :only (interpret-token)]) 
   (:import [java.io PushbackReader StringReader]
            [java.util.regex Pattern Matcher]
-           [clojure.lang Namespace Compiler Symbol Keyword]
+           [clojure.lang IFn RT Symbol PersistentHashSet LazilyPersistentVector]
            [clojure.lang LineNumberingPushbackReader LispReader$ReaderException]))
 
+(declare read)
+(declare read-string)
+
+(defn read-delimited-list [^Character ch, ^PushbackReader reader, recursive?]
+  
+  )
+
+(defmacro defreader [name & body]
+  `(defn ~name ~[^PushbackReader 'reader, ^Character 'ch]
+     ~@body
+     )
+  )
+
+(defreader string-reader)
+
+(defreader comment-reader
+  (loop [ch (.read reader)]
+    (if (not (or (= -1 ch)
+                 (= \newline (char ch))
+                 (= \return (char ch))
+                 ))
+      (recur (.read reader))
+      reader)))
+
+(defreader meta-reader)
+(defreader syntax-quote-reader)
+(defreader unquote-reader)
+(defreader list-reader)
+(defreader character-reader)
+(defreader arg-reader)
+(defreader dispatch-reader)
+(defreader regex-reader)
+(defreader fn-reader)
+(defreader eval-reader)
+
+(defreader discard-reader
+  (read reader true nil true)
+  reader)
+
+(defreader unmatched-delimiter-reader
+  (throw (RuntimeException. (str "Unmatched delimiter: " ch))))
+
+(defreader unreadable-reader
+  (throw (RuntimeException. "Unreadable form")))
+
+(defreader set-reader
+  (PersistentHashSet/createWithCheck (read-delimited-list \} reader true)))
+
+(defreader vector-reader
+  (LazilyPersistentVector/create (read-delimited-list \] reader true)))
+
+(defreader map-reader
+  (let [read (read-delimited-list \} reader true)]
+    (if (bit-and (.length read) 1)
+      (throw (RuntimeException. "Map literal must contain an even number of forms"))
+      (RT/map read))))
+
+(defn make-wrapping-reader [^Symbol sym]
+  (fn [^PushbackReader reader, ^Character ch]
+    (RT/list sym (read reader true nil true))))
+
+(def macros (make-array IFn 256))
+(def dispatch-macros (make-array IFn 256))
+
+(do
+  (aset macros \" string-reader)
+  (aset macros \; comment-reader)
+  (aset macros \' (make-wrapping-reader (Symbol/intern "quote")))
+  (aset macros \@ (make-wrapping-reader (Symbol/intern "clojure.core" "deref")))
+  (aset macros \^ meta-reader)
+  (aset macros \` syntax-quote-reader)
+  (aset macros \~ unquote-reader)
+  (aset macros \( list-reader)
+  (aset macros \) unmatched-delimiter-reader)
+  (aset macros \[ vector-reader)
+  (aset macros \] unmatched-delimiter-reader)
+  (aset macros \{ map-reader)
+  (aset macros \} unmatched-delimiter-reader)
+  (aset macros \\ character-reader)
+  (aset macros \% arg-reader)
+  (aset macros \# dispatch-reader))
+
+(do
+  (aset dispatch-macros \^ meta-reader)
+  (aset dispatch-macros \' (make-wrapping-reader (Symbol/intern "var")))
+  (aset dispatch-macros \" regex-reader)
+  (aset dispatch-macros \( fn-reader)
+  (aset dispatch-macros \{ set-reader)
+  (aset dispatch-macros \= eval-reader)
+  (aset dispatch-macros \! comment-reader)
+  (aset dispatch-macros \< unreadable-reader)
+  (aset dispatch-macros \_ discard-reader))
 
 (defn- get-macro [ch]
-  (fn [^PushbackReader stream, Character ch] ch))
+  (if (< ch (alength macros))
+    (aget macros ch)))
 
 (defn- macro? [ch]
-  false)
+  (and (< ch (alength macros))
+       (not-nil? (aget macros ch))
+       ))
 
 (defn- terminating-macro? [ch]
-  false)
+  (and (not (or (= \# (char ch))
+                (= \\ (char ch))
+                ))
+       (macro? ch)))
 
 (defn- read-a-token [^PushbackReader stream, ch]
   (let [sb (StringBuilder.)]
     (.append sb (char ch))
     (loop [ch (.read stream)]
-      (if (not (or (= -1 ch) (whitespace? (char ch)) (terminating-macro? ch)))
+      (if (not (or (= -1 ch) (whitespace? ch) (terminating-macro? ch)))
         (do
           (.append sb (char ch))
           (recur (.read stream)))
@@ -34,7 +132,7 @@
   (let [sb (StringBuilder.)]
     (.append sb (char ch))
     (loop [ch (.read stream)]
-      (if (not (or (= -1 ch) (whitespace? (char ch)) (macro? ch)))
+      (if (not (or (= -1 ch) (whitespace? ch) (macro? ch)))
         (do
           (.append sb (char ch))
           (recur (.read stream)))
@@ -59,14 +157,18 @@
   ([stream eof-error? eof-value recursive?]
      (try
        (loop [ch (.read stream)]
-         (if (whitespace? (char ch))
+         (if (whitespace? ch)
            (recur (.read stream))
            (cond
             (= -1 ch) (if eof-error?
                         (throw (RuntimeException. "EOF while reading"))
                         eof-value)
             (Character/isDigit ch) (read-a-number stream ch)
-            (macro? ch) ((get-macro ch) stream (char ch))
+            (macro? ch) (let [the-macro (get-macro ch)
+                              val (the-macro stream (char ch))]
+                          (if (= stream val) ; no-op macros return the reader
+                            (recur (.read stream))
+                            val))
             (plus-or-minus? ch) (let [ch2 (.read stream)]
                                   (if (Character/isDigit ch2)
                                     (do
