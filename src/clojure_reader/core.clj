@@ -1,27 +1,24 @@
 (ns clojure-reader.core
   (:refer-clojure :exclude [read read-string])
   (:use clojure-reader.util
-        [clojure-reader.numbers :only (match-number)])
+        [clojure-reader.numbers :only (match-number)]
+        [clojure-reader.symbols :only (interpret-token)]) 
   (:import [java.io PushbackReader StringReader]
            [java.util.regex Pattern Matcher]
            [clojure.lang Namespace Compiler Symbol Keyword]
            [clojure.lang LineNumberingPushbackReader LispReader$ReaderException]))
 
 
-(defn get-macro [ch]
+(defn- get-macro [ch]
   (fn [^PushbackReader stream, Character ch] ch))
 
-(defn macro? [ch]
+(defn- macro? [ch]
   false)
 
-(defn terminating-macro? [ch]
+(defn- terminating-macro? [ch]
   false)
 
-(defn whitespace?
-  "Determine if the character is considered whitespace in Clojure"
-  [ch] (or (Character/isWhitespace ch) (= \, ch)))
-
-(defn read-token [^PushbackReader stream, ch]
+(defn- read-a-token [^PushbackReader stream, ch]
   (let [sb (StringBuilder.)]
     (.append sb (char ch))
     (loop [ch (.read stream)]
@@ -33,55 +30,7 @@
           (.unread stream ch)
           (.toString sb))))))
 
-(defn namespace-for
-  ([^Symbol sym] (namespace-for *ns* sym))
-  ([^Namespace inns, ^Symbol sym]
-     (let [ns-sym (Symbol/intern (.ns sym))
-           ns (.lookupAlias inns ns-sym )]
-       (if (nil? ns)
-         (Namespace/find ns-sym)
-         ns))))
-
-(def symbol-pattern (Pattern/compile "[:]?([\\D&&[^/]].*/)?([\\D&&[^/]][^/]*)"))
-(defn match-symbol [s]
-  (let [m (.matcher symbol-pattern s)]
-    (if (.matches m)
-      (let [gc (.groupCount m)
-            ns (.group m 1)
-            name (.group m 2)]
-        (cond
-         (or (and (not-nil? ns) (.endsWith ns ":/"))
-             (.endsWith name ":")
-             (not= -1 (.indexOf s "::" 1)))
-         nil
-
-         (.startsWith s "::")
-         (let [ks (Symbol/intern (.substring s 2))
-               kns (if (not-nil? (.getNamespace ks))
-                     (namespace-for ks)
-                     *ns*)]
-           (if (not-nil? kns)
-             (Keyword/intern (.. kns getName getName) (. ks getName))))
-
-         :else
-         (let [keyword? (= \: (.charAt s 0))
-               sym (Symbol/intern (.substring s (if keyword? 1 0)))]
-           (if keyword?
-             (Keyword/intern sym)
-             sym)))))))
-
-(defn interpret-token [token]
-  (condp = token
-    "nil" nil
-    "true" true
-    "false" false
-    "/" /
-    "clojure.core//" clojure.core//
-    (if-let [matched (match-symbol token)]
-      matched
-      (throw (RuntimeException. (str "Invalid token: " token))))))
-
-(defn read-a-number [^PushbackReader stream, ^Character ch]
+(defn- read-a-number [^PushbackReader stream, ^Character ch]
   (let [sb (StringBuilder.)]
     (.append sb (char ch))
     (loop [ch (.read stream)]
@@ -96,9 +45,6 @@
         (throw (NumberFormatException. (str "Invalid number: " s)))
         n))))
 
-(defn- plus-or-minus? [^Character ch]
-  (let [chr (char ch)]
-    (or (= chr \+) (= chr \-))))
 
 (defn read
   "Reads the next object from stream, which must be an instance of
@@ -128,8 +74,8 @@
                                       (read-a-number stream ch))
                                     (do
                                       (.unread stream ch2)
-                                      (interpret-token (read-token stream ch)))))
-            :else (interpret-token (read-token stream ch)))))
+                                      (interpret-token (read-a-token stream ch)))))
+            :else (interpret-token (read-a-token stream ch)))))
        (catch Exception e
          (if (or recursive? (not (instance? LineNumberingPushbackReader stream)))
            (throw-runtime e)

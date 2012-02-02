@@ -19,3 +19,11 @@
      (if (instance? RuntimeException e)
        (throw e)
         (throw (RuntimeException. e)))))
+
+(defn whitespace?
+  "Determine if the character is considered whitespace in Clojure"
+  [ch] (or (Character/isWhitespace ch) (= \, ch)))
+
+(defn plus-or-minus? [^Character ch]
+  (let [chr (char ch)]
+    (or (= chr \+) (= chr \-))))
