@@ -31,3 +31,7 @@
   (is :foo (cr/read-string ":foo"))
   (is :clojure-reader.test.core/foo (cr/read-string "::foo"))
   (is 'clojure.core/map (cr/read-string "clojure.core/map")))
+
+(deftest read-regex
+  (is #"foo" (cr/read-string "#\"foo\""))
+  )

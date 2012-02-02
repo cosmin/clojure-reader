@@ -11,6 +11,10 @@
 (declare read)
 (declare read-string)
 
+(def macros (make-array IFn 256))
+(def dispatch-macros (make-array IFn 256))
+
+
 (defn read-delimited-list [^Character ch, ^PushbackReader reader, recursive?]
   
   )
@@ -32,14 +36,45 @@
       (recur (.read reader))
       reader)))
 
+(defreader ctor-reader)
 (defreader meta-reader)
 (defreader syntax-quote-reader)
 (defreader unquote-reader)
 (defreader list-reader)
 (defreader character-reader)
 (defreader arg-reader)
-(defreader dispatch-reader)
-(defreader regex-reader)
+(defreader dispatch-reader
+  (loop [ch (.read reader)]
+    (if (= -1 ch)
+      (throw (RuntimeException. "EOF while reading character"))
+      (let [dfn (aget dispatch-macros ch)
+            chr (char ch)]
+        (if (nil? dfn)
+          (do
+            (.unread reader chr)
+            (let [result (ctor-reader reader chr)]
+              (if (nil? result)
+                (throw (RuntimeException. (str "No dispatch macro for:" chr)))
+                result)))
+          (dfn reader (char ch)))))))
+
+(defreader regex-reader
+  (let [sb (StringBuilder.)]
+    (loop [ch (.read reader)]
+      (if (= -1 ch)
+        (throw (RuntimeException. "EOF while reading regex"))
+        (let [chr (char ch)]
+          (if (not= \" chr)
+            (do
+              (.append sb chr)
+              (if (= \\ chr)
+                (let [ch2 (.read reader)]
+                  (if (= -1 ch2)
+                    (throw (RuntimeException. "EOF while reading regex"))
+                    (.append sb (char ch2)))))
+              (recur (.read reader)))
+            (Pattern/compile (.toString sb))))))))
+
 (defreader fn-reader)
 (defreader eval-reader)
 
@@ -68,9 +103,6 @@
 (defn make-wrapping-reader [^Symbol sym]
   (fn [^PushbackReader reader, ^Character ch]
     (RT/list sym (read reader true nil true))))
-
-(def macros (make-array IFn 256))
-(def dispatch-macros (make-array IFn 256))
 
 (do
   (aset macros \" string-reader)
