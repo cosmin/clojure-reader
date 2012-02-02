@@ -1,5 +1,5 @@
-(ns clojurereader.numbers
-  (:use clojurereader.util)
+(ns clojure-reader.numbers
+  (:use clojure-reader.util)
   (:import [java.io PushbackReader]
            [java.math BigDecimal BigInteger]
            [java.util.regex Pattern Matcher]

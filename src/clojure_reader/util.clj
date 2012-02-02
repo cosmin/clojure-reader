@@ -1,4 +1,4 @@
-(ns clojurereader.util)
+(ns clojure-reader.util)
 
 (defn not-nil? [val]
   (not (nil? val)))

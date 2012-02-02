@@ -1,7 +1,7 @@
-(ns clojurereader.core
+(ns clojure-reader.core
   (:refer-clojure :exclude [read read-string])
-  (:use clojurereader.util
-        [clojurereader.numbers :only (match-number)])
+  (:use clojure-reader.util
+        [clojure-reader.numbers :only (match-number)])
   (:import [java.io PushbackReader StringReader]
            [java.util.regex Pattern Matcher]
            [clojure.lang Namespace Compiler Symbol Keyword]

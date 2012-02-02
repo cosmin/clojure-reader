@@ -1,4 +1,4 @@
-# clojurereader
+# clojure-reader
 
 A re-implementation of the Clojure reader in Clojure
 
@@ -6,7 +6,7 @@ A re-implementation of the Clojure reader in Clojure
 
 As a drop-in replacement for the Clojure reader you can simply replace
 `clojure.core/read` and `clojure.core/read-string` with the equivalent
-functions from `clojurereader`.
+functions from `clojure-reader`.
 
 ## License
 

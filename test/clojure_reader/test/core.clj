@@ -1,5 +1,5 @@
-(ns clojurereader.test.core
-  (:require [clojurereader.core :as cr])
+(ns clojure-reader.test.core
+  (:require [clojure-reader.core :as cr])
   (:use [clojure.test]))
 
 (deftest read-integers
@@ -29,5 +29,5 @@
 
 (deftest read-symbols
   (is :foo (cr/read-string ":foo"))
-  (is :clojurereader.test.core/foo (cr/read-string "::foo"))
+  (is :clojure-reader.test.core/foo (cr/read-string "::foo"))
   (is 'clojure.core/map (cr/read-string "clojure.core/map")))
