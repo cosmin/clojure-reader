@@ -4,6 +4,7 @@
         [clojure-reader.numbers :only (match-number)]
         [clojure-reader.symbols :only (interpret-token)]) 
   (:import [java.io PushbackReader StringReader]
+           [java.util ArrayList]
            [java.util.regex Pattern Matcher]
            [clojure.lang IFn RT Symbol PersistentHashSet LazilyPersistentVector]
            [clojure.lang LineNumberingPushbackReader LispReader$ReaderException]))
@@ -14,10 +15,50 @@
 (def macros (make-array IFn 256))
 (def dispatch-macros (make-array IFn 256))
 
+(defn- get-macro [ch]
+  (if (< ch (alength macros))
+    (aget macros ch)))
 
-(defn read-delimited-list [^Character ch, ^PushbackReader reader, recursive?]
-  
-  )
+(defn- macro? [ch]
+  (and (< ch (alength macros))
+       (not-nil? (aget macros ch))
+       ))
+
+(defn- terminating-macro? [ch]
+  (and (not (or (= \# (char ch))
+                (= \\ (char ch))
+                ))
+       (macro? ch)))
+
+
+(defn read-delimited-list [^Character delim, ^PushbackReader reader, recursive?]
+  (let [first-line (if (instance? LineNumberingPushbackReader reader)
+                     (.getLineNumber reader)
+                     -1)
+        a (ArrayList.)]
+    (loop [ch (.read reader)]
+      (if (= -1 ch)
+        (if (< first-line 0)
+          (throw (RuntimeException. "EOF while reading"))
+          (throw (RuntimeException. (str "EOF while reading, starting at line " first-line))))
+        (if (whitespace? ch)
+          (recur (.read reader))
+          (if (= (char ch) delim)
+            a
+            (do
+              (if (macro? ch)
+                (let [mret ((get-macro ch) reader (char ch))]
+                  (if (not= reader mret)
+                    (do (.add a mret)
+                        (recur (.read reader))
+                        )
+                    (recur (.read reader))))
+                (do
+                  (.unread reader ch)
+                  (let [o (read reader true nil recursive?)]
+                    (if (not= reader o)
+                      (.add a o)))
+                  (recur (.read reader)))))))))))
 
 (defmacro defreader [name & body]
   `(defn ~name ~[^PushbackReader 'reader, ^Character 'ch]
@@ -96,9 +137,9 @@
 
 (defreader map-reader
   (let [read (read-delimited-list \} reader true)]
-    (if (bit-and (.length read) 1)
+    (if (not= 0 (bit-and (.size read) 1))
       (throw (RuntimeException. "Map literal must contain an even number of forms"))
-      (RT/map read))))
+      (RT/map (.toArray read)))))
 
 (defn make-wrapping-reader [^Symbol sym]
   (fn [^PushbackReader reader, ^Character ch]
@@ -133,20 +174,6 @@
   (aset dispatch-macros \< unreadable-reader)
   (aset dispatch-macros \_ discard-reader))
 
-(defn- get-macro [ch]
-  (if (< ch (alength macros))
-    (aget macros ch)))
-
-(defn- macro? [ch]
-  (and (< ch (alength macros))
-       (not-nil? (aget macros ch))
-       ))
-
-(defn- terminating-macro? [ch]
-  (and (not (or (= \# (char ch))
-                (= \\ (char ch))
-                ))
-       (macro? ch)))
 
 (defn- read-a-token [^PushbackReader stream, ch]
   (let [sb (StringBuilder.)]
