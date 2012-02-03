@@ -66,5 +66,18 @@
 
 (deftest reading-metadata
   (is {:foo true} (meta (cr/read-string "^:foo (1 2 3)")))
-  (is {:a 1} (meta (cr/read-string "^{:a 1} (1 2 3)")))
-  )
+  (is {:a 1} (meta (cr/read-string "^{:a 1} (1 2 3)"))))
+
+(deftest reading-strings
+  (let [simple-string "\"abcd\""
+        octal-string "\"abc\\177\""
+        unicode-string "\"abc\\0104\""
+        escaped-string "\\n\\\b\\f\\r"]
+    (is (clojure.core/read-string simple-string)
+        (cr/read-string simple-string))
+    (is (clojure.core/read-string octal-string)
+        (cr/read-string octal-string))
+    (is (clojure.core/read-string unicode-string)
+        (cr/read-string unicode-string))
+    (is (clojure.core/read-string escaped-string)
+        (cr/read-string escaped-string))))

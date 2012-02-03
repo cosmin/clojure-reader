@@ -64,7 +64,67 @@
      )
   )
 
-(defreader string-reader)
+(defn read-unicode-char [^PushbackReader reader,
+                         ^Character initch,
+                         base, length,
+                         exact?]
+  (loop [uc (Character/digit initch (int base)) i 1]
+    (if (= -1 uc)
+      (throw (IllegalArgumentException. (str "Invalid digit: " initch)))
+      (let [ch (.read reader)]
+        (if (or (= -1 ch) (whitespace? (char ch)) (macro? ch))
+          (do
+            (.unread reader ch)
+            (if (and exact? (not= length i))
+              (throw (IllegalArgumentException. (str "Invalid character length: " i ", should be: " length)))
+              uc
+              )
+            )
+          (let [d (Character/digit (char ch) (int base))]
+            (if (= -1 d)
+              (throw (IllegalArgumentException. (str "Invalid digit: " ch)))
+              (recur (+ d (* uc base)) (+ i 1)))))))))
+
+(defn read-escaped-character [^PushbackReader reader]
+  (let [ch (.read reader)]
+    (if (= 01 ch)
+      (throw (RuntimeException. "EOF while reading string"))
+      (let [chr (char ch)]
+        (condp = chr
+          \t \tab
+          \r \return
+          \n \newline
+          \\ \\
+          \" \"
+          \b \backspace
+          \f \formfeed
+          \u
+          (let [ch (.read reader)]
+            (if (= -1 (Character/digit ch 16))
+              (throw (RuntimeException. (str "Invalid unicode escape: \\u" (char ch))))
+              (read-unicode-char reader (char ch) 16 4 true)))
+          (if (Character/isDigit chr)
+            (let [uchr (read-unicode-char reader chr 8 3 false)]
+              (if (> uchr 0377)
+                (throw (RuntimeException. "Octal escape sequence must be in range [0, 377]."))
+                (char uchr)))
+            (throw (RuntimeException. (str "Unsupported escape character: \\" chr)))))))))
+
+(defreader string-reader
+  (let [sb (StringBuilder.)]
+    (loop [ch (.read reader)]
+      (if (= -1 ch)
+        (throw (RuntimeException. "EOF while reading string"))
+        (let [chr (char ch)]
+          (if (= \" chr)
+            (.toString sb)
+            (if (not= \\ chr)
+              (do
+                (.append sb chr)
+                (recur (.read reader)))
+              (let [echr (read-escaped-character reader)]
+                (.append sb echr)
+                (recur (.read reader))))))))))
 
 (defreader comment-reader
   (loop [ch (.read reader)]
