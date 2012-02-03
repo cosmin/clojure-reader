@@ -35,17 +35,26 @@
 (deftest read-regex
   (is #"foo" (cr/read-string "#\"foo\"")))
 
+(deftest read-list
+  (is '() (cr/read-string "()"))
+  (is '(1) (cr/read-string "(1)"))
+  (is '(1 2 3) (cr/read-string "(1 2 3)"))
+  (is '(1 (2 3)) (cr/read-string "(1 (2 3))")))
+
 (deftest read-vector
+  (is [] (cr/read-string "[]"))
   (is [1] (cr/read-string "[1]"))
   (is [1 2 3] (cr/read-string "[1 2 3]"))
   (is [1 [2 3]] (cr/read-string "[1 [2 3]]")))
 
 (deftest read-map
+  (is {} (cr/read-string "{}"))
   (is {1 2} (cr/read-string "{1 2}"))
   (is {1 {2 3}} (cr/read-string "{1 {2 3}}"))
   (is {1 {2 3} 4 5} (cr/read-string "{1 {2 3} 4 5}")))
 
 (deftest read-set
+  (is #{} (cr/read-string "#{}"))
   (is #{1} (cr/read-string "#{1}"))
   (is #{1 2} (cr/read-string "#{1 2}"))
   (is #{1 2 #{3 4}} (cr/read-string "#{1 2 #{3 4}}")))

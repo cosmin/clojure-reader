@@ -6,7 +6,8 @@
   (:import [java.io PushbackReader StringReader]
            [java.util ArrayList]
            [java.util.regex Pattern Matcher]
-           [clojure.lang IFn RT Symbol PersistentHashSet LazilyPersistentVector]
+           [clojure.lang IFn RT Symbol]
+           [clojure.lang PersistentList PersistentHashSet LazilyPersistentVector]
            [clojure.lang LineNumberingPushbackReader LispReader$ReaderException]))
 
 (declare read)
@@ -30,11 +31,13 @@
                 ))
        (macro? ch)))
 
+(defn get-line-number [^PushbackReader reader]
+  (if (instance? LineNumberingPushbackReader reader)
+    (.getLineNumber reader)
+    -1))
 
 (defn read-delimited-list [^Character delim, ^PushbackReader reader, recursive?]
-  (let [first-line (if (instance? LineNumberingPushbackReader reader)
-                     (.getLineNumber reader)
-                     -1)
+  (let [first-line (get-line-number reader)
         a (ArrayList.)]
     (loop [ch (.read reader)]
       (if (= -1 ch)
@@ -81,7 +84,18 @@
 (defreader meta-reader)
 (defreader syntax-quote-reader)
 (defreader unquote-reader)
-(defreader list-reader)
+
+(defreader list-reader
+  (let [line (get-line-number reader)
+        lst (read-delimited-list \) reader true)]
+    (if (.isEmpty lst)
+      (PersistentList/EMPTY)
+      (let [s (PersistentList/create lst)]
+        (if (not= -1 line)
+          (.withMeta s {:line line})
+          s
+          )))))
+
 (defreader character-reader)
 (defreader arg-reader)
 (defreader dispatch-reader
