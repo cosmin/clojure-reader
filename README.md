@@ -2,11 +2,40 @@
 
 A re-implementation of the Clojure reader in Clojure
 
-## Usage
+## What's working
 
-As a drop-in replacement for the Clojure reader you can simply replace
-`clojure.core/read` and `clojure.core/read-string` with the equivalent
-functions from `clojure-reader`.
+- strings
+- regex
+
+- comments
+- discard
+
+- metadata
+- symbols
+
+- lists
+- vectors
+- maps
+- sets
+
+- integers
+- floats
+- ratios
+
+## What's left
+
+- records
+- tagged literals
+
+- syntax quote
+- unquote
+
+- character
+
+- fn reader
+- arg reader
+
+- eval reader
 
 ## License
 
