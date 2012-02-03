@@ -6,8 +6,8 @@
   (:import [java.io PushbackReader StringReader]
            [java.util ArrayList]
            [java.util.regex Pattern Matcher]
-           [clojure.lang IFn RT Symbol]
-           [clojure.lang PersistentList PersistentHashSet LazilyPersistentVector]
+           [clojure.lang IFn RT Symbol Keyword IMeta IReference]
+           [clojure.lang PersistentList PersistentHashSet LazilyPersistentVector IPersistentMap]
            [clojure.lang LineNumberingPushbackReader LispReader$ReaderException]))
 
 (declare read)
@@ -81,7 +81,33 @@
       reader)))
 
 (defreader ctor-reader)
-(defreader meta-reader)
+
+(defn to-meta-map [meta]
+  (cond
+   (or (instance? Symbol meta) (instance? String meta)) {:tag meta}
+   (instance? Keyword meta) {meta true}
+   (instance? IPersistentMap meta) meta
+   :else (throw (IllegalArgumentException. "Metadata must be Symbol,Keyword,String or Map"))))
+
+(defn to-meta-map-with-line-number
+  ([meta] (to-meta-map-with-line-number -1))
+  ([meta line]
+     (let [meta-without-line (to-meta-map meta)]
+       (if (not= line -1)
+         (assoc meta-without-line :line line)
+         meta-without-line))))
+
+(defreader meta-reader
+  (let [line (get-line-number reader)
+        meta (to-meta-map-with-line-number (read reader true nil true) line)
+        o (read reader true nil true)]
+    (if (instance? IMeta o)
+      (if (instance? IReference o)
+        (do (.resetMeta o meta) o)
+        (.withMeta o (merge (RT/meta o) meta)))
+      (throw (IllegalArgumentException. "Metadata can only be applied to IMetas")))))
+
+
 (defreader syntax-quote-reader)
 (defreader unquote-reader)
 

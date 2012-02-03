@@ -63,3 +63,8 @@
   (is [1 2] (cr/read-string "[1, 2]"))
   (is {1 2} (cr/read-string "{1, 2}"))
   (is 1 (cr/read-string ",1")))
+
+(deftest read-metadata
+  (is {:foo true} (meta (cr/read-string "^:foo (1 2 3)")))
+  (is {:a 1} (meta (cr/read-string "^{:a 1} (1 2 3)")))
+  )
