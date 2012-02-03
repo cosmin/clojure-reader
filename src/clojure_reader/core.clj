@@ -31,11 +31,6 @@
                 ))
        (macro? ch)))
 
-(defn get-line-number [^PushbackReader reader]
-  (if (instance? LineNumberingPushbackReader reader)
-    (.getLineNumber reader)
-    -1))
-
 (defn read-delimited-list [^Character delim, ^PushbackReader reader, recursive?]
   (let [first-line (get-line-number reader)
         a (ArrayList.)]

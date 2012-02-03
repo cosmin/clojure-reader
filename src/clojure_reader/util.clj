@@ -1,4 +1,6 @@
-(ns clojure-reader.util)
+(ns clojure-reader.util
+  (:import [java.io PushbackReader]
+           [clojure.lang LineNumberingPushbackReader]))
 
 (defn not-nil? [val]
   (not (nil? val)))
@@ -30,3 +32,8 @@
 (defn plus-or-minus? [^Character ch]
   (let [chr (char ch)]
     (or (= chr \+) (= chr \-))))
+
+(defn get-line-number [^PushbackReader reader]
+  (if (instance? LineNumberingPushbackReader reader)
+    (.getLineNumber reader)
+    -1))
