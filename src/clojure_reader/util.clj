@@ -25,7 +25,7 @@
   [ch]
   (if (= -1 ch)
     false
-    (or (Character/isWhitespace ch) (= \, ch))))
+    (or (Character/isWhitespace ch) (= \, (char ch)))))
 
 (defn plus-or-minus? [^Character ch]
   (let [chr (char ch)]

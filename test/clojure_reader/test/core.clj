@@ -49,3 +49,8 @@
   (is #{1} (cr/read-string "#{1}"))
   (is #{1 2} (cr/read-string "#{1 2}"))
   (is #{1 2 #{3 4}} (cr/read-string "#{1 2 #{3 4}}")))
+
+(deftest comma-is-whitespace
+  (is [1 2] (cr/read-string "[1, 2]"))
+  (is {1 2} (cr/read-string "{1, 2}"))
+  (is 1 (cr/read-string ",1")))
