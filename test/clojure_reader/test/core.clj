@@ -72,7 +72,7 @@
   (let [simple-string "\"abcd\""
         octal-string "\"abc\\177\""
         unicode-string "\"abc\\0104\""
-        escaped-string "\\n\\\b\\f\\r"]
+        escaped-string "\"\\n\\b\\f\\r\""]
     (is (clojure.core/read-string simple-string)
         (cr/read-string simple-string))
     (is (clojure.core/read-string octal-string)
@@ -81,3 +81,9 @@
         (cr/read-string unicode-string))
     (is (clojure.core/read-string escaped-string)
         (cr/read-string escaped-string))))
+
+(deftest read-characters
+  (is \space (cr/read-string "\\space"))
+  (is \c     (cr/read-string "\\c"))
+  (is \o377  (cr/read-string "\\o377"))
+  (is \u0104 (cr/read-string "\\u0104")))

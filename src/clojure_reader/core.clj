@@ -2,7 +2,7 @@
   (:refer-clojure :exclude [read read-string])
   (:use clojure-reader.util
         [clojure-reader.numbers :only (match-number)]
-        [clojure-reader.symbols :only (interpret-token)]) 
+        [clojure-reader.symbols :only (interpret-token)])
   (:import [java.io PushbackReader StringReader]
            [java.util ArrayList]
            [java.util.regex Pattern Matcher]
@@ -30,6 +30,19 @@
                 (= \\ (char ch))
                 ))
        (macro? ch)))
+
+(defn- read-a-token [^PushbackReader stream, ch]
+  (let [sb (StringBuilder.)]
+    (.append sb (char ch))
+    (loop [ch (.read stream)]
+      (if (not (or (= -1 ch) (whitespace? ch) (terminating-macro? ch)))
+        (do
+          (.append sb (char ch))
+          (recur (.read stream)))
+        (do
+          (.unread stream ch)
+          (.toString sb))))))
+
 
 (defn read-delimited-list [^Character delim, ^PushbackReader reader, recursive?]
   (let [first-line (get-line-number reader)
@@ -64,30 +77,43 @@
      )
   )
 
-(defn read-unicode-char [^PushbackReader reader,
-                         ^Character initch,
-                         base, length,
-                         exact?]
-  (loop [uc (Character/digit initch (int base)) i 1]
-    (if (= -1 uc)
-      (throw (IllegalArgumentException. (str "Invalid digit: " initch)))
-      (let [ch (.read reader)]
-        (if (or (= -1 ch) (whitespace? (char ch)) (macro? ch))
-          (do
-            (.unread reader ch)
-            (if (and exact? (not= length i))
-              (throw (IllegalArgumentException. (str "Invalid character length: " i ", should be: " length)))
-              uc
-              )
-            )
-          (let [d (Character/digit (char ch) (int base))]
-            (if (= -1 d)
-              (throw (IllegalArgumentException. (str "Invalid digit: " ch)))
-              (recur (+ d (* uc base)) (+ i 1)))))))))
+(defn read-unicode-char
+  ([^String token, ^long offset, ^long length, ^long base]
+     (if (not= (.length token) (+ offset length))
+       (throw (IllegalArgumentException. (str "Invalid unicode character: \\" token)))
+       (loop [uc 0 i offset]
+         (if (= i (+ offset length))
+           uc
+           (do
+             (let [ch (.charAt token i)
+                   d (Character/digit ch base)]
+               (if (= -1 d)
+                 (throw (IllegalArgumentException. (str "Invalid digit: " ch)))
+                 (recur (+ d (* uc base)) (+ i 1)))))))))
+  ([^PushbackReader reader,
+     ^Character initch,
+     base, length,
+     exact?]
+      (loop [uc (Character/digit initch (int base)) i 1]
+        (if (= -1 uc)
+          (throw (IllegalArgumentException. (str "Invalid digit: " initch)))
+          (let [ch (.read reader)]
+            (if (or (= -1 ch) (whitespace? (char ch)) (macro? ch))
+              (do
+                (.unread reader ch)
+                (if (and exact? (not= length i))
+                  (throw (IllegalArgumentException. (str "Invalid character length: " i ", should be: " length)))
+                  uc
+                  )
+                )
+              (let [d (Character/digit (char ch) (int base))]
+                (if (= -1 d)
+                  (throw (IllegalArgumentException. (str "Invalid digit: " ch)))
+                  (recur (+ d (* uc base)) (+ i 1))))))))))
 
 (defn read-escaped-character [^PushbackReader reader]
   (let [ch (.read reader)]
-    (if (= 01 ch)
+    (if (= -1 ch)
       (throw (RuntimeException. "EOF while reading string"))
       (let [chr (char ch)]
         (condp = chr
@@ -177,7 +203,40 @@
           s
           )))))
 
-(defreader character-reader)
+(defreader character-reader
+  (let [ch (.read reader)]
+    (if (= -1 ch)
+      (throw (RuntimeException. "EOF while reading character"))
+      (let [token (read-a-token reader (char ch))]
+        (if (= 1 (.length token))
+          (Character/valueOf (.charAt token 0))
+          (condp = token
+            "newline" \newline
+            "space" \space
+            "tab" \tab
+            "backspace" \backspace
+            "formfeed" \formfeed
+            "return" \return
+            (cond
+             (.startsWith token "u")
+             (let [c (read-unicode-char token 1 4 16)]
+               (if (and  (>= c 0xD800 (<= c 0xDFFF)))
+                 (throw (RuntimeException. (str "Invalid character constant: \\u"
+                                                (Integer/toString c 16))))
+                 (char c)))
+
+             (.startsWith token "o")
+             (let [len (- (.length token) 1)]
+               (if (> len 3)
+                 (throw (RuntimeException. (str "Invalid octal escape sequence length: " len)))
+                 (let [uc (read-unicode-char token 1 len 8)]
+                   (if (> uc 0377)
+                     (throw (RuntimeException. "Octal escape sequence must be in range [0, 377]."))
+                     (char uc)))))
+
+             :else
+             (throw (RuntimeException. (str "Unsupported character: \\" token))))))))))
+
 (defreader arg-reader)
 (defreader dispatch-reader
   (loop [ch (.read reader)]
@@ -269,18 +328,6 @@
   (aset dispatch-macros \< unreadable-reader)
   (aset dispatch-macros \_ discard-reader))
 
-
-(defn- read-a-token [^PushbackReader stream, ch]
-  (let [sb (StringBuilder.)]
-    (.append sb (char ch))
-    (loop [ch (.read stream)]
-      (if (not (or (= -1 ch) (whitespace? ch) (terminating-macro? ch)))
-        (do
-          (.append sb (char ch))
-          (recur (.read stream)))
-        (do
-          (.unread stream ch)
-          (.toString sb))))))
 
 (defn- read-a-number [^PushbackReader stream, ^Character ch]
   (let [sb (StringBuilder.)]
