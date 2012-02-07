@@ -37,3 +37,16 @@
   (if (instance? LineNumberingPushbackReader reader)
     (.getLineNumber reader)
     -1))
+
+(defn slice
+  ([string start-idx]
+     (slice string start-idx (.length string)))
+  ([string start-idx end-idx]
+     (let [len (.length string)
+           positivize #(if (< %1 0) (+ len %1) %1)
+           s (positivize start-idx)
+           e (positivize end-idx)]
+       (println string "[" s ":" e "]")
+       (if (< s e)
+         (.substring string s e)
+         ""))))
