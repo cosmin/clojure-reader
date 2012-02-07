@@ -2,12 +2,13 @@
   (:refer-clojure :exclude [read read-string])
   (:use clojure-reader.util
         [clojure-reader.numbers :only (match-number)]
-        [clojure-reader.symbols :only (interpret-token)])
+        [clojure-reader.symbols :only (interpret-token resolve-symbol is-special)])
   (:import [java.io PushbackReader StringReader]
            [java.util ArrayList]
            [java.util.regex Pattern Matcher]
-           [clojure.lang IFn RT Symbol Keyword IMeta IReference]
-           [clojure.lang PersistentList PersistentHashSet LazilyPersistentVector IPersistentMap]
+           [clojure.lang IFn RT Symbol Keyword IMeta IReference IObj]
+           [clojure.lang PersistentList PersistentHashSet LazilyPersistentVector]
+           [clojure.lang IPersistentMap IPersistentCollection]
            [clojure.lang LineNumberingPushbackReader LispReader$ReaderException]))
 
 (declare read)
@@ -189,8 +190,112 @@
       (throw (IllegalArgumentException. "Metadata can only be applied to IMetas")))))
 
 
-(defreader syntax-quote-reader)
-(defreader unquote-reader)
+(def ^:dynamic *gensym-environment* nil)
+
+
+(defn- unquote? [form]
+  (and (seq? form) (= (first form) clojure.core/unquote)))
+
+(defn- unquote-splicing? [form]
+  (and (seq? form) (= (first form) clojure.core/unquote-splicing)))
+
+(declare syntax-quote)
+
+(defn- syntax-quote-symbol [^Symbol sym]
+  (list (Symbol/intern "quote")
+        (cond
+         (and (nil? (namespace sym)) (.endsWith (name sym) "#"))
+         (let [gmap *gensym-environment*]
+           (if (nil? gmap)
+             (throw (IllegalStateException. "Gensym literal not in syntax-quote"))
+             (let [gs (gmap sym)]
+               (if (nil? gs)
+                 (let [sym-name (str (slice (name sym) 0 -1) "__" (RT/nextID) "__auto__")
+                       gs (Symbol/intern nil sym-name)]
+                   (var-set (var *gensym-environment*) (assoc gmap sym gs))
+                   gs)
+                 gs))))
+
+         (and (nil? (namespace sym)) (.endsWith (name sym) "."))
+         (let [csym (Symbol/intern nil (slice (name sym) 0 -1))
+               rsym (resolve-symbol csym)]
+           (Symbol/intern nil (.concat (name rsym) ".")))
+
+         (and (nil? (namespace sym)) (.startsWith (name sym) "."))
+         sym
+
+         :else
+         (if (not-nil? (namespace sym))
+           (let [maybe-class (.getMapping *ns* (Symbol/intern nil (.getNamespace sym)))]
+             (if (instance? Class maybe-class)
+               (Symbol/intern (.getName maybe-class) (name sym))
+               (resolve-symbol sym)))
+           (resolve-symbol sym)))))
+
+(defn- flatten-map [form]
+  (reduce (fn [result keyval] (apply conj result keyval)) [] form))
+
+(defn- seq-expand-list [lst]
+  (doall (map (fn [item]
+                (cond
+                 (unquote? item) (RT/list 'clojure.core/list (second item))
+                 (unquote-splicing? item) (second item)
+                 :else (list 'clojure.core/list (syntax-quote item))
+                 )
+                ) lst)))
+
+(defn- syntax-quote-seq [constructor form]
+  (let [inner (list 'clojure.core/seq
+                    (apply list 'clojure.core/concat
+                          (seq-expand-list form)))]
+    (if (nil? constructor)
+      inner
+      (RT/list 'clojure.core/apply constructor inner))))
+
+(defn- syntax-quote-col [form]
+  (cond
+   (map? form) (syntax-quote-seq 'clojure.core/hash-map (flatten-map form))
+   (vector? form) (syntax-quote-seq 'clojure.core/vector form)
+   (set? form) (syntax-quote-seq 'clojure.core/hash-set form)
+   (or (seq? form) (list? form))
+   (if (nil? (seq form)) (list 'clojure.core/list) (syntax-quote-seq nil form))
+   :else (throw (UnsupportedOperationException. "Unknown Collection type"))))
+
+
+(defn syntax-quote [form]
+  (let [ret (cond
+             (is-special form) (list 'quote form)
+             (instance? Symbol form) (syntax-quote-symbol form)
+             (unquote? form) (RT/second form)
+             (unquote-splicing? form) (throw (IllegalStateException. "splice not in list"))
+             (instance? IPersistentCollection form) (syntax-quote-col form)
+             (or  (instance? Keyword form) (instance? Number form)
+                  (instance? Character form) (instance? String form)) form
+                  :else (list 'quote form))]
+    (if (and (instance? IObj form) (not-nil? (meta form)))
+      (let [new-meta (dissoc  (meta form) :line)] ; filter line numbers
+        (if (> 0 (.count new-meta))
+          (list clojure.core/with-meta ret (syntax-quote (meta form)))
+          ret))
+      ret
+      )))
+
+(defreader syntax-quote-reader
+  (binding [*gensym-environment* {}]
+    (let [form (read reader true nil true)]
+      (syntax-quote form))))
+
+(defreader unquote-reader
+  (let [ch (.read reader)]
+    (if (= -1 ch)
+      (throw (RuntimeException. "EOF while reading character"))
+      (if (= \@ (char ch))
+        (let [o (read reader true nil true)]
+          (RT/list clojure.core/unquote-splicing o))
+        (do
+          (.unread reader ch)
+          (let [o (read reader true nil true)]
+            (RT/list clojure.core/unquote o)))))))
 
 (defreader list-reader
   (let [line (get-line-number reader)

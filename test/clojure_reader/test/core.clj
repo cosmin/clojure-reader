@@ -87,3 +87,7 @@
   (is \c     (cr/read-string "\\c"))
   (is \o377  (cr/read-string "\\o377"))
   (is \u0104 (cr/read-string "\\u0104")))
+
+(deftest test-syntax-quote
+  (doseq [form ["`1" "`map" "`asdfasdv" "`(1 2 (3 4))" "`(a b c ~z)" "`(a b c ~@z)"]]
+    (is (= (clojure.core/read-string form)) (cr/read-string form))))

@@ -1,7 +1,7 @@
 (ns clojure-reader.symbols
   (:use clojure-reader.util)
   (:import [java.util.regex Pattern Matcher]
-           [clojure.lang Namespace Compiler Symbol Keyword]))
+           [clojure.lang Namespace Compiler Symbol Keyword Var]))
 
 (defn namespace-for
   ([^Symbol sym] (namespace-for *ns* sym))
@@ -27,7 +27,7 @@
 
          (.startsWith s "::")
          (let [ks (Symbol/intern (.substring s 2))
-               kns (if (not-nil? (.getNamespace ks))
+               kns (if (not-nil? (namespace ks))
                      (namespace-for ks)
                      *ns*)]
            (if (not-nil? kns)
@@ -50,3 +50,20 @@
     (if-let [matched (match-symbol token)]
       matched
       (throw (RuntimeException. (str "Invalid token: " token))))))
+
+(defn resolve-symbol [sym]
+  (cond
+   (> (.indexOf (name sym) ".") 0) sym ;; already namespace qualified or class name
+   (not-nil? (namespace sym)) (let [ns (namespace-for sym)]
+                          (if (or (nil? ns) (= (namespace sym) (.. ns getName getName)))
+                            sym ;; cannot be found or same namespace
+                            (Symbol/intern (.. ns getName getName) (. sym getName))))
+   :else
+   (let [o (.getMapping *ns* sym)]
+     (cond
+      (nil? o) (Symbol/intern (.. *ns* getName getName) (. sym getName))
+      (instance? Class o) (Symbol/intern nil (.getName ^Class o))
+      (instance? Var o) (Symbol/intern (.. ^Var o ns getName getName) (.. ^Var o sym getName))
+      :else nil))))
+
+(defn is-special [sym] (.containsKey Compiler/specials sym))
