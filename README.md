@@ -2,8 +2,13 @@
 
 A re-implementation of the Clojure reader in Clojure
 
-## What's working
+## Progress
 
+Keep up with the current progress at https://trello.com/b/ldJ8faYe
+
+### What's working
+
+- character
 - strings
 - regex
 
@@ -22,15 +27,13 @@ A re-implementation of the Clojure reader in Clojure
 - floats
 - ratios
 
-## What's left
-
-- records
-- tagged literals
+### What's left
 
 - syntax quote
 - unquote
 
-- character
+- records
+- tagged literals
 
 - fn reader
 - arg reader
