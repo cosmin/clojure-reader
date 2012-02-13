@@ -99,3 +99,11 @@
       (= java.util.Date (class (cr/read-string s))))
     (binding [*data-readers* {'inst clojure.instant/read-instant-calendar}]
       (= java.util.GregorianCalendar (class (cr/read-string s))))))
+
+(defrecord Person [name age])
+
+(deftest test-records
+  (is (= #clojure_reader.test.core.Person["test" 18]
+         (cr/read-string "#clojure_reader.test.core.Person[\"test\" 18]")))
+  (is (= #clojure_reader.test.core.Person{:age 18}
+         (cr/read-string "#clojure_reader.test.core.Person{:age 18}"))))

@@ -6,7 +6,7 @@
   (:import [java.io PushbackReader StringReader]
            [java.util ArrayList]
            [java.util.regex Pattern Matcher]
-           [clojure.lang IFn RT Symbol Keyword IMeta IReference IObj]
+           [clojure.lang IFn RT Symbol Keyword IMeta IReference IObj Reflector]
            [clojure.lang PersistentList PersistentHashSet LazilyPersistentVector]
            [clojure.lang IPersistentMap IPersistentCollection]
            [clojure.lang LineNumberingPushbackReader LispReader$ReaderException]))
@@ -374,7 +374,35 @@
               (recur (.read reader)))
             (Pattern/compile (.toString sb))))))))
 
-(defn- read-record [^PushbackReader reader, ^Symbol sym] nil)
+(defn- read-record [^PushbackReader reader, ^Symbol record-name]
+  (let [record-class (RT/classForName (.toString record-name))
+        ch (.read reader)]
+    (if (= -1 ch)
+      (throw (RuntimeException. "EOF while reading constructor form"))
+      (let [chr (char ch)
+            [endch short-form?] (condp = chr
+                                  \{ [\} false]
+                                  \[ [\] true]
+                                  (throw (RuntimeException. (str "Unreadable constructor form"
+                                                                 "starting with \"#"
+                                                                 record-name chr "\""))))
+            record-entries (.toArray (read-delimited-list endch reader true))
+            all-ctors (.getConstructors record-class)
+            ]
+        (if short-form?
+          (let [matching-ctor #(= (alength record-entries) (alength (.getParameterTypes %1)))
+                ctor (first (filter matching-ctor all-ctors))]
+            (if (nil? ctor)
+              (throw (RuntimeException. (str "Unexpected number of constructor arguments to "
+                                             record-class ": got " (alength record-entries))))
+              (Reflector/invokeConstructor record-class record-entries)))
+          (let [vals (RT/map record-entries)]
+            (doseq [k (keys vals)]
+              (if (not (instance? Keyword k))
+                (throw (RuntimeException. (str "Unreadable defrecord form: "
+                                               "key must be of type clojure.lang.Keyword, got "
+                                               k)))))
+            (Reflector/invokeStaticMethod record-class "create" (into-array Object [vals]))))))))
 
 (defn- get-data-reader [tag]
   (let [data-readers clojure.core/*data-readers*
