@@ -91,3 +91,11 @@
 (deftest test-syntax-quote
   (doseq [form ["`1" "`map" "`asdfasdv" "`(1 2 (3 4))" "`(a b c ~z)" "`(a b c ~@z)"]]
     (is (= (clojure.core/read-string form)) (cr/read-string form))))
+
+(deftest test-tagged-literals
+  (let [s "#inst \"2010-11-12T13:14:15.666-06:00\""]
+    (is (= (clojure.core/read-string s) (cr/read-string s)))
+    (binding [*data-readers* {}]
+      (= java.util.Date (class (cr/read-string s))))
+    (binding [*data-readers* {'inst clojure.instant/read-instant-calendar}]
+      (= java.util.GregorianCalendar (class (cr/read-string s))))))

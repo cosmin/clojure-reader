@@ -162,8 +162,6 @@
       (recur (.read reader))
       reader)))
 
-(defreader ctor-reader)
-
 (defn to-meta-map [meta]
   (cond
    (or (instance? Symbol meta) (instance? String meta)) {:tag meta}
@@ -342,7 +340,8 @@
              :else
              (throw (RuntimeException. (str "Unsupported character: \\" token))))))))))
 
-(defreader arg-reader)
+(declare ctor-reader)
+
 (defreader dispatch-reader
   (loop [ch (.read reader)]
     (if (= -1 ch)
@@ -351,7 +350,7 @@
             chr (char ch)]
         (if (nil? dfn)
           (do
-            (.unread reader chr)
+            (.unread reader ch)
             (let [result (ctor-reader reader chr)]
               (if (nil? result)
                 (throw (RuntimeException. (str "No dispatch macro for:" chr)))
@@ -375,7 +374,35 @@
               (recur (.read reader)))
             (Pattern/compile (.toString sb))))))))
 
+(defn- read-record [^PushbackReader reader, ^Symbol sym] nil)
+
+(defn- get-data-reader [tag]
+  (let [data-readers clojure.core/*data-readers*
+        data-reader (data-readers tag)]
+    (if (nil? data-reader)
+      (let [default-reader (clojure.core/default-data-readers tag)]
+        (if (nil? default-reader)
+          (throw (RuntimeException. (str "No reader function for tag" tag)))
+          default-reader
+          ))
+      data-reader)))
+
+(defn- read-tagged [^PushbackReader reader, ^Symbol tag]
+  (let [o (read reader true nil true)
+        data-reader (get-data-reader tag)]
+    (data-reader o)))
+
+(defreader ctor-reader
+  (let [sym (read reader true nil false)]
+    (if (not (instance? Symbol sym))
+      (throw (RuntimeException. "Reader tag must be a symbol"))
+      (if (.contains (name sym) ".")
+        (read-record reader sym)
+        (read-tagged reader sym)))))
+
 (defreader fn-reader)
+(defreader arg-reader)
+
 (defreader eval-reader)
 
 (defreader discard-reader
