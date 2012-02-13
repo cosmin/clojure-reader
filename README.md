@@ -27,13 +27,13 @@ Keep up with the current progress at https://trello.com/b/ldJ8faYe
 - floats
 - ratios
 
-### What's left
-
 - syntax quote
 - unquote
 
 - records
 - tagged literals
+
+### What's left
 
 - fn reader
 - arg reader
