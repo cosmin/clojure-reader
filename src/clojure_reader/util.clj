@@ -49,3 +49,9 @@
        (if (< s e)
          (.substring string s e)
          ""))))
+
+(defn digit? [chr]
+  (Character/isDigit chr))
+
+(defn char->digit [chr base]
+  (Character/digit chr base))

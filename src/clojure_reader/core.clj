@@ -89,7 +89,7 @@
            uc
            (do
              (let [ch (.charAt token i)
-                   d (Character/digit ch base)]
+                   d (char->digit ch base)]
                (if (= -1 d)
                  (throw (IllegalArgumentException. (str "Invalid digit: " ch)))
                  (recur (+ d (* uc base)) (+ i 1)))))))))
@@ -97,7 +97,7 @@
      ^Character initch,
      base, length,
      exact?]
-      (loop [uc (Character/digit initch (int base)) i 1]
+      (loop [uc (char->digit initch (int base)) i 1]
         (if (= -1 uc)
           (throw (IllegalArgumentException. (str "Invalid digit: " initch)))
           (if (= length i)
@@ -111,7 +111,7 @@
                     uc
                     )
                   )
-                (let [d (Character/digit (char ch) (int base))]
+                (let [d (char->digit (char ch) (int base))]
                   (if (= -1 d)
                     (throw (IllegalArgumentException. (str "Invalid digit: " ch)))
                     (recur (+ d (* uc base)) (+ i 1)))))))))))
@@ -131,10 +131,10 @@
           \f \formfeed
           \u
           (let [ch (.read reader)]
-            (if (= -1 (Character/digit ch 16))
+            (if (= -1 (char->digit ch 16))
               (throw (RuntimeException. (str "Invalid unicode escape: \\u" (char ch))))
               (read-unicode-char reader (char ch) 16 4 true)))
-          (if (Character/isDigit chr)
+          (if (digit? chr)
             (let [uchr (read-unicode-char reader chr 8 3 false)]
               (if (> uchr 0377)
                 (throw (RuntimeException. "Octal escape sequence must be in range [0, 377]."))
@@ -168,9 +168,9 @@
 
 (defn to-meta-map [meta]
   (cond
-   (or (instance? Symbol meta) (instance? String meta)) {:tag meta}
-   (instance? Keyword meta) {meta true}
-   (instance? IPersistentMap meta) meta
+   (or (symbol? meta) (string? meta)) {:tag meta}
+   (keyword? meta) {meta true}
+   (map? meta) meta
    :else (throw (IllegalArgumentException. "Metadata must be Symbol,Keyword,String or Map"))))
 
 (defn to-meta-map-with-line-number
@@ -204,7 +204,7 @@
 (declare syntax-quote)
 
 (defn- syntax-quote-symbol [^Symbol sym]
-  (list (Symbol/intern "quote")
+  (list 'quote
         (cond
          (and (nil? (namespace sym)) (.endsWith (name sym) "#"))
          (let [gmap *gensym-environment*]
@@ -213,24 +213,24 @@
              (let [gs (gmap sym)]
                (if (nil? gs)
                  (let [sym-name (str (slice (name sym) 0 -1) "__" (RT/nextID) "__auto__")
-                       gs (Symbol/intern nil sym-name)]
+                       gs (symbol nil sym-name)]
                    (var-set (var *gensym-environment*) (assoc gmap sym gs))
                    gs)
                  gs))))
 
          (and (nil? (namespace sym)) (.endsWith (name sym) "."))
-         (let [csym (Symbol/intern nil (slice (name sym) 0 -1))
+         (let [csym (symbol nil (slice (name sym) 0 -1))
                rsym (resolve-symbol csym)]
-           (Symbol/intern nil (.concat (name rsym) ".")))
+           (symbol nil (.concat (name rsym) ".")))
 
          (and (nil? (namespace sym)) (.startsWith (name sym) "."))
          sym
 
          :else
          (if (not-nil? (namespace sym))
-           (let [maybe-class (.getMapping *ns* (Symbol/intern nil (.getNamespace sym)))]
-             (if (instance? Class maybe-class)
-               (Symbol/intern (.getName maybe-class) (name sym))
+           (let [maybe-class (.getMapping *ns* (symbol nil (.getNamespace sym)))]
+             (if (class? maybe-class)
+               (symbol (.getName maybe-class) (name sym))
                (resolve-symbol sym)))
            (resolve-symbol sym)))))
 
@@ -267,12 +267,12 @@
 (defn syntax-quote [form]
   (let [ret (cond
              (is-special form) (list 'quote form)
-             (instance? Symbol form) (syntax-quote-symbol form)
+             (symbol? form) (syntax-quote-symbol form)
              (unquote? form) (RT/second form)
              (unquote-splicing? form) (throw (IllegalStateException. "splice not in list"))
-             (instance? IPersistentCollection form) (syntax-quote-col form)
-             (or  (instance? Keyword form) (instance? Number form)
-                  (instance? Character form) (instance? String form)) form
+             (coll? form) (syntax-quote-col form)
+             (or (keyword? form) (number? form)
+                 (char? form) (string? form)) form
                   :else (list 'quote form))]
     (if (and (instance? IObj form) (not-nil? (meta form)))
       (let [new-meta (dissoc  (meta form) :line)] ; filter line numbers
@@ -402,7 +402,7 @@
               (Reflector/invokeConstructor record-class record-entries)))
           (let [vals (RT/map record-entries)]
             (doseq [k (keys vals)]
-              (if (not (instance? Keyword k))
+              (if (not (keyword? k))
                 (throw (RuntimeException. (str "Unreadable defrecord form: "
                                                "key must be of type clojure.lang.Keyword, got "
                                                k)))))
@@ -426,7 +426,7 @@
 
 (defreader ctor-reader
   (let [sym (read reader true nil false)]
-    (if (not (instance? Symbol sym))
+    (if (not (symbol? sym))
       (throw (RuntimeException. "Reader tag must be a symbol"))
       (if (.contains (name sym) ".")
         (read-record reader sym)
@@ -435,7 +435,7 @@
 (def ^:dynamic *arg-env* nil)
 
 (defn- garg [^long n]
-  (Symbol/intern nil (if (= -1 n) "rest" (str "p" n "__" (RT/nextID) "#"))))
+  (symbol nil (if (= -1 n) "rest" (str "p" n "__" (RT/nextID) "#"))))
 
 (defn- get-args []
   (let [argsym *arg-env*
@@ -484,7 +484,7 @@
         (register-arg 1)
         (let [n (read reader true nil true)]
           (cond (= '& n) (register-arg -1)
-                (not (instance? Number n)) (throw (IllegalStateException.
+                (not (number? n)) (throw (IllegalStateException.
                                                    "arg literal must be %, %& or %integer"))
                 :else (register-arg (int n))))))))
 
@@ -492,25 +492,25 @@
   (if (not clojure.core/*read-eval*)
     (throw (RuntimeException. "EvalReader not allowed when *read-eval* is false."))
     (let [o (read reader true nil true)]
-      (condp instance? o
-        Symbol (RT/classForName (str o))
-        IPersistentList (let [fs (first o)]
-                          (cond
-                           (= fs 'var) (let [vs (second o)] (RT/var (namespace o) (name o)))
-                           (.endsWith (name fs) ".") (let [args (RT/toArray (next o))]
-                                                       (Reflector/invokeConstructor
-                                                        (RT/classForName (slice (name fs) 0 -1))
-                                                        args))
-                           (Compiler/namesStaticMember fs) (let [args (RT/toArray (next o))]
-                                                             (Reflector/invokeStaticMethod
-                                                              (namespace fs)
-                                                              (name fs)
-                                                              args))
-                           :else (let [v (Compiler/maybeResolveIn *ns* fs)]
-                                   (if (instance? Var v)
-                                     (apply v (next o))
-                                     (throw (RuntimeException. (str "Can't resolve " fs)))))))
-        (throw (IllegalArgumentException. "Unsupported #= form"))))))
+      (cond 
+       (symbol? o) (RT/classForName (str o))
+       (list? o) (let [fs (first o)]
+                   (cond
+                    (= fs 'var) (let [vs (second o)] (RT/var (namespace o) (name o)))
+                    (.endsWith (name fs) ".") (let [args (RT/toArray (next o))]
+                                                (Reflector/invokeConstructor
+                                                 (RT/classForName (slice (name fs) 0 -1))
+                                                 args))
+                    (Compiler/namesStaticMember fs) (let [args (RT/toArray (next o))]
+                                                      (Reflector/invokeStaticMethod
+                                                       (namespace fs)
+                                                       (name fs)
+                                                       args))
+                    :else (let [v (Compiler/maybeResolveIn *ns* fs)]
+                            (if (var? v)
+                              (apply v (next o))
+                              (throw (RuntimeException. (str "Can't resolve " fs)))))))
+       :else (throw (IllegalArgumentException. "Unsupported #= form"))))))
 
 (defreader discard-reader
   (read reader true nil true)
@@ -541,8 +541,8 @@
 (do
   (aset macros \" string-reader)
   (aset macros \; comment-reader)
-  (aset macros \' (make-wrapping-reader (Symbol/intern "quote")))
-  (aset macros \@ (make-wrapping-reader (Symbol/intern "clojure.core" "deref")))
+  (aset macros \' (make-wrapping-reader 'quote))
+  (aset macros \@ (make-wrapping-reader 'clojure.core/deref))
   (aset macros \^ meta-reader)
   (aset macros \` syntax-quote-reader)
   (aset macros \~ unquote-reader)
@@ -558,7 +558,7 @@
 
 (do
   (aset dispatch-macros \^ meta-reader)
-  (aset dispatch-macros \' (make-wrapping-reader (Symbol/intern "var")))
+  (aset dispatch-macros \' (make-wrapping-reader 'var))
   (aset dispatch-macros \" regex-reader)
   (aset dispatch-macros \( fn-reader)
   (aset dispatch-macros \{ set-reader)
@@ -603,14 +603,14 @@
             (eof? ch) (if eof-error?
                         (throw (RuntimeException. "EOF while reading"))
                         eof-value)
-            (Character/isDigit ch) (read-a-number stream ch)
+            (digit? ch) (read-a-number stream ch)
             (macro? ch) (let [the-macro (get-macro ch)
                               val (the-macro stream (char ch))]
                           (if (= stream val) ; no-op macros return the reader
                             (recur (.read stream))
                             val))
             (plus-or-minus? ch) (let [ch2 (.read stream)]
-                                  (if (Character/isDigit ch2)
+                                  (if (digit? ch2)
                                     (do
                                       (.unread stream ch2)
                                       (read-a-number stream ch))

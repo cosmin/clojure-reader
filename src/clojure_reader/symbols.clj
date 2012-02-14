@@ -6,7 +6,7 @@
 (defn namespace-for
   ([^Symbol sym] (namespace-for *ns* sym))
   ([^Namespace inns, ^Symbol sym]
-     (let [ns-sym (Symbol/intern (.ns sym))
+     (let [ns-sym (symbol (.ns sym))
            ns (.lookupAlias inns ns-sym )]
        (if (nil? ns)
          (Namespace/find ns-sym)
@@ -26,7 +26,7 @@
          nil
 
          (.startsWith s "::")
-         (let [ks (Symbol/intern (.substring s 2))
+         (let [ks (symbol (.substring s 2))
                kns (if (not-nil? (namespace ks))
                      (namespace-for ks)
                      *ns*)]
@@ -35,7 +35,7 @@
 
          :else
          (let [keyword? (= \: (.charAt s 0))
-               sym (Symbol/intern (.substring s (if keyword? 1 0)))]
+               sym (symbol (.substring s (if keyword? 1 0)))]
            (if keyword?
              (Keyword/intern sym)
              sym)))))))
@@ -55,15 +55,15 @@
   (cond
    (> (.indexOf (name sym) ".") 0) sym ;; already namespace qualified or class name
    (not-nil? (namespace sym)) (let [ns (namespace-for sym)]
-                          (if (or (nil? ns) (= (namespace sym) (.. ns getName getName)))
+                                (if (or (nil? ns) (= (namespace sym) (name (ns-name ns))))
                             sym ;; cannot be found or same namespace
-                            (Symbol/intern (.. ns getName getName) (. sym getName))))
+                            (symbol (name (ns-name ns)) (name sym))))
    :else
    (let [o (.getMapping *ns* sym)]
      (cond
-      (nil? o) (Symbol/intern (.. *ns* getName getName) (. sym getName))
-      (instance? Class o) (Symbol/intern nil (.getName ^Class o))
-      (instance? Var o) (Symbol/intern (.. ^Var o ns getName getName) (.. ^Var o sym getName))
+      (nil? o) (symbol (name (ns-name *ns*)) (name sym))
+      (class? o) (symbol nil (.getName ^Class o))
+      (var? o) (symbol (name (ns-name (.ns ^Var o))) (name (.sym ^Var o)))
       :else nil))))
 
 (defn is-special [sym] (.containsKey Compiler/specials sym))
