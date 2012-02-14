@@ -538,11 +538,15 @@
   (fn [^PushbackReader reader, ^Character ch]
     (RT/list sym (read reader true nil true))))
 
+(def quote-reader (make-wrapping-reader 'quote))
+(def deref-reader (make-wrapping-reader 'clojure.core/deref))
+(def var-reader   (make-wrapping-reader 'var))
+
 (do
   (aset macros \" string-reader)
   (aset macros \; comment-reader)
-  (aset macros \' (make-wrapping-reader 'quote))
-  (aset macros \@ (make-wrapping-reader 'clojure.core/deref))
+  (aset macros \' quote-reader)
+  (aset macros \@ deref-reader)
   (aset macros \^ meta-reader)
   (aset macros \` syntax-quote-reader)
   (aset macros \~ unquote-reader)
@@ -558,7 +562,7 @@
 
 (do
   (aset dispatch-macros \^ meta-reader)
-  (aset dispatch-macros \' (make-wrapping-reader 'var))
+  (aset dispatch-macros \' var-reader)
   (aset dispatch-macros \" regex-reader)
   (aset dispatch-macros \( fn-reader)
   (aset dispatch-macros \{ set-reader)
