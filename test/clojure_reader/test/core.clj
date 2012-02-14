@@ -112,8 +112,8 @@
   (is (= #clojure_reader.test.core.Person{:age 18}
          (cr/read-string "#clojure_reader.test.core.Person{:age 18}"))))
 
-;; (deftest test-eval-reader
-;;   (is 3 (cr/read-string "#=(+ 2 1"))
-;;   (is "" (cr/read-string "#=(java.lang.String.)"))
-;;   (is 12 (cr/read-string "#=(java.lang.Long/valueOf 12"))
-;;   )
+(deftest test-eval-reader
+  (is (= 3 (cr/read-string "#=(+ 2 1)")))
+  (is (= "" (cr/read-string "#=(java.lang.String.)")))
+  (is (= 12 (cr/read-string "#=(java.lang.Long/valueOf 12)")))
+  )
