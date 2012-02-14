@@ -55,3 +55,6 @@
 
 (defn char->digit [chr base]
   (Character/digit chr base))
+
+(defn eof? [ch]
+  (or (= -1 ch) (= 65535 ch)))

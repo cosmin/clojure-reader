@@ -14,9 +14,6 @@
 (declare read)
 (declare read-string)
 
-(defn eof? [ch]
-  (or (= -1 ch) (= 65535 ch)))
-
 (def macros (make-array IFn 256))
 (def dispatch-macros (make-array IFn 256))
 
