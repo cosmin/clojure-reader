@@ -122,3 +122,11 @@
 
 (deftest test-arg-reader
   (is (= 3 (apply (eval (cr/read-string "#(+ %1 %2)")) [1 2]))))
+
+(deftest test-wrapping-readers
+  (let [quote-form "'foo"
+        var-form "#'foo"
+        deref-form "@foo"]
+    (is (= (clojure.core/read-string quote-form) (cr/read-string quote-form)))
+    (is (= (clojure.core/read-string var-form) (cr/read-string var-form)))
+    (is (= (clojure.core/read-string deref-form) (cr/read-string deref-form)))))
