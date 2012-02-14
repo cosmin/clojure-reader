@@ -98,19 +98,21 @@
       (loop [uc (Character/digit initch (int base)) i 1]
         (if (= -1 uc)
           (throw (IllegalArgumentException. (str "Invalid digit: " initch)))
-          (let [ch (.read reader)]
-            (if (or (= -1 ch) (whitespace? (char ch)) (macro? ch))
-              (do
-                (.unread reader ch)
-                (if (and exact? (not= length i))
-                  (throw (IllegalArgumentException. (str "Invalid character length: " i ", should be: " length)))
-                  uc
+          (if (= length i)
+            uc
+            (let [ch (.read reader)]
+              (if (or (= -1 ch) (whitespace? (char ch)) (macro? ch))
+                (do
+                  (.unread reader ch)
+                  (if (and exact? (not= length i))
+                    (throw (IllegalArgumentException. (str "Invalid character length: " i ", should be: " length)))
+                    uc
+                    )
                   )
-                )
-              (let [d (Character/digit (char ch) (int base))]
-                (if (= -1 d)
-                  (throw (IllegalArgumentException. (str "Invalid digit: " ch)))
-                  (recur (+ d (* uc base)) (+ i 1))))))))))
+                (let [d (Character/digit (char ch) (int base))]
+                  (if (= -1 d)
+                    (throw (IllegalArgumentException. (str "Invalid digit: " ch)))
+                    (recur (+ d (* uc base)) (+ i 1)))))))))))
 
 (defn read-escaped-character [^PushbackReader reader]
   (let [ch (.read reader)]
