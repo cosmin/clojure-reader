@@ -14,6 +14,9 @@
 (declare read)
 (declare read-string)
 
+(defn eof? [ch]
+  (or (= -1 ch) (= 65535 ch)))
+
 (def macros (make-array IFn 256))
 (def dispatch-macros (make-array IFn 256))
 
@@ -36,7 +39,7 @@
   (let [sb (StringBuilder.)]
     (.append sb (char ch))
     (loop [ch (.read stream)]
-      (if (not (or (= -1 ch) (whitespace? ch) (terminating-macro? ch)))
+      (if (not (or (eof? ch) (whitespace? ch) (terminating-macro? ch)))
         (do
           (.append sb (char ch))
           (recur (.read stream)))
@@ -49,7 +52,7 @@
   (let [first-line (get-line-number reader)
         a (ArrayList.)]
     (loop [ch (.read reader)]
-      (if (= -1 ch)
+      (if (eof? ch)
         (if (< first-line 0)
           (throw (RuntimeException. "EOF while reading"))
           (throw (RuntimeException. (str "EOF while reading, starting at line " first-line))))
@@ -62,8 +65,7 @@
                 (let [mret ((get-macro ch) reader (char ch))]
                   (if (not= reader mret)
                     (do (.add a mret)
-                        (recur (.read reader))
-                        )
+                        (recur (.read reader)))
                     (recur (.read reader))))
                 (do
                   (.unread reader ch)
@@ -101,7 +103,7 @@
           (if (= length i)
             uc
             (let [ch (.read reader)]
-              (if (or (= -1 ch) (whitespace? (char ch)) (macro? ch))
+              (if (or (eof? ch) (whitespace? (char ch)) (macro? ch))
                 (do
                   (.unread reader ch)
                   (if (and exact? (not= length i))
@@ -116,7 +118,7 @@
 
 (defn read-escaped-character [^PushbackReader reader]
   (let [ch (.read reader)]
-    (if (= -1 ch)
+    (if (eof? ch)
       (throw (RuntimeException. "EOF while reading string"))
       (let [chr (char ch)]
         (condp = chr
@@ -142,7 +144,7 @@
 (defreader string-reader
   (let [sb (StringBuilder.)]
     (loop [ch (.read reader)]
-      (if (= -1 ch)
+      (if (eof? ch)
         (throw (RuntimeException. "EOF while reading string"))
         (let [chr (char ch)]
           (if (= \" chr)
@@ -157,7 +159,7 @@
 
 (defreader comment-reader
   (loop [ch (.read reader)]
-    (if (not (or (= -1 ch)
+    (if (not (or (eof? ch)
                  (= \newline (char ch))
                  (= \return (char ch))
                  ))
@@ -287,7 +289,7 @@
 
 (defreader unquote-reader
   (let [ch (.read reader)]
-    (if (= -1 ch)
+    (if (eof? ch)
       (throw (RuntimeException. "EOF while reading character"))
       (if (= \@ (char ch))
         (let [o (read reader true nil true)]
@@ -310,7 +312,7 @@
 
 (defreader character-reader
   (let [ch (.read reader)]
-    (if (= -1 ch)
+    (if (eof? ch)
       (throw (RuntimeException. "EOF while reading character"))
       (let [token (read-a-token reader (char ch))]
         (if (= 1 (.length token))
@@ -346,7 +348,7 @@
 
 (defreader dispatch-reader
   (loop [ch (.read reader)]
-    (if (= -1 ch)
+    (if (eof? ch)
       (throw (RuntimeException. "EOF while reading character"))
       (let [dfn (aget dispatch-macros ch)
             chr (char ch)]
@@ -362,7 +364,7 @@
 (defreader regex-reader
   (let [sb (StringBuilder.)]
     (loop [ch (.read reader)]
-      (if (= -1 ch)
+      (if (eof? ch)
         (throw (RuntimeException. "EOF while reading regex"))
         (let [chr (char ch)]
           (if (not= \" chr)
@@ -370,7 +372,7 @@
               (.append sb chr)
               (if (= \\ chr)
                 (let [ch2 (.read reader)]
-                  (if (= -1 ch2)
+                  (if (eof? ch2)
                     (throw (RuntimeException. "EOF while reading regex"))
                     (.append sb (char ch2)))))
               (recur (.read reader)))
@@ -379,7 +381,7 @@
 (defn- read-record [^PushbackReader reader, ^Symbol record-name]
   (let [record-class (RT/classForName (.toString record-name))
         ch (.read reader)]
-    (if (= -1 ch)
+    (if (eof? ch)
       (throw (RuntimeException. "EOF while reading constructor form"))
       (let [chr (char ch)
             [endch short-form?] (condp = chr
@@ -517,7 +519,7 @@
   (let [sb (StringBuilder.)]
     (.append sb (char ch))
     (loop [ch (.read stream)]
-      (if (not (or (= -1 ch) (whitespace? ch) (macro? ch)))
+      (if (not (or (eof? ch) (whitespace? ch) (macro? ch)))
         (do
           (.append sb (char ch))
           (recur (.read stream)))
@@ -545,7 +547,7 @@
          (if (whitespace? ch)
            (recur (.read stream))
            (cond
-            (= -1 ch) (if eof-error?
+            (eof? ch) (if eof-error?
                         (throw (RuntimeException. "EOF while reading"))
                         eof-value)
             (Character/isDigit ch) (read-a-number stream ch)
