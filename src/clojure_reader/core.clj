@@ -7,7 +7,7 @@
            [java.util ArrayList]
            [java.util.regex Pattern Matcher]
            [clojure.lang IFn RT Symbol Keyword IMeta IReference IObj Reflector Var]
-           [clojure.lang PersistentList PersistentHashSet LazilyPersistentVector]
+           [clojure.lang PersistentList PersistentHashSet LazilyPersistentVector PersistentTreeMap]
            [clojure.lang IPersistentMap IPersistentCollection IPersistentList]
            [clojure.lang LineNumberingPushbackReader LispReader$ReaderException]))
 
@@ -432,7 +432,38 @@
         (read-record reader sym)
         (read-tagged reader sym)))))
 
-(defreader fn-reader)
+(def ^:dynamic *arg-env* nil)
+
+(defn- garg [^long n]
+  (Symbol/intern nil (if (= -1 n) "rest" (str "p" n "__" (RT/nextID) "#"))))
+
+(defn- get-args []
+  (let [argsym *arg-env*
+        args []
+        rargs (rseq argsym)]
+    (if (not-nil? rargs)
+      (let [higharg (key (first rargs))]
+        (if (> higharg 0)
+          (apply conj args (for [i (range 1 (inc higharg))]
+                             (let [sym (get argsym i)]
+                               (if (nil? sym)
+                                 (garg i)
+                                 sym))))
+          (let [restsym (get argsym -1)]
+            (if (not-nil? restsym)
+              (conj args '& restsym)
+              args))))
+      args)))
+
+(defreader fn-reader
+  (if (not-nil? *arg-env*)
+    (throw (IllegalStateException. "Nested #()s are not allowed"))
+    (binding [*arg-env* (PersistentTreeMap/EMPTY)]
+      (.unread reader (int ch))
+      (let [form (read reader true nil true)
+            args (get-args)]
+        (list 'fn* args form)))))
+
 (defreader arg-reader)
 
 (defreader eval-reader

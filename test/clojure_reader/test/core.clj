@@ -115,5 +115,7 @@
 (deftest test-eval-reader
   (is (= 3 (cr/read-string "#=(+ 2 1)")))
   (is (= "" (cr/read-string "#=(java.lang.String.)")))
-  (is (= 12 (cr/read-string "#=(java.lang.Long/valueOf 12)")))
-  )
+  (is (= 12 (cr/read-string "#=(java.lang.Long/valueOf 12)"))))
+
+(deftest test-fn-reader
+  (is (= (cr/read-string "#(+ 1 2)") (clojure.core/read-string "#(+ 1 2)"))))
