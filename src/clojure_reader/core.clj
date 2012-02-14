@@ -6,9 +6,9 @@
   (:import [java.io PushbackReader StringReader]
            [java.util ArrayList]
            [java.util.regex Pattern Matcher]
-           [clojure.lang IFn RT Symbol Keyword IMeta IReference IObj Reflector]
+           [clojure.lang IFn RT Symbol Keyword IMeta IReference IObj Reflector Var]
            [clojure.lang PersistentList PersistentHashSet LazilyPersistentVector]
-           [clojure.lang IPersistentMap IPersistentCollection]
+           [clojure.lang IPersistentMap IPersistentCollection IPersistentList]
            [clojure.lang LineNumberingPushbackReader LispReader$ReaderException]))
 
 (declare read)
@@ -431,7 +431,29 @@
 (defreader fn-reader)
 (defreader arg-reader)
 
-(defreader eval-reader)
+(defreader eval-reader
+  (if (not clojure.core/*read-eval*)
+    (throw (RuntimeException. "EvalReader not allowed when *read-eval* is false."))
+    (let [o (read reader true nil true)]
+      (condp instance? o
+        Symbol (RT/classForName (str o))
+        IPersistentList (let [fs (first o)]
+                          (cond
+                           (= fs 'var) (let [vs (second o)] (RT/var (namespace o) (name o)))
+                           (.endsWith (name fs) ".") (let [args (RT/toArray (next o))]
+                                                       (Reflector/invokeConstructor
+                                                        (RT/classForName (slice (name fs) 0 -1))
+                                                        args))
+                           (Compiler/namesStaticMember fs) (let [args (RT/toArray (next o))]
+                                                             (Reflector/invokeStaticMethod
+                                                              (namespace fs)
+                                                              (name fs)
+                                                              args))
+                           :else (let [v (Compiler/maybeResolveIn *ns* fs)]
+                                   (if (instance? Var v)
+                                     (apply v (next o))
+                                     (throw (RuntimeException. (str "Can't resolve " fs)))))))
+        (throw (IllegalArgumentException. "Unsupported #= form"))))))
 
 (defreader discard-reader
   (read reader true nil true)
