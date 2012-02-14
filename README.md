@@ -1,12 +1,10 @@
 # clojure-reader
 
-A re-implementation of the Clojure reader in Clojure
+A re-implementation of the Clojure reader in Clojure.
 
-## Progress
+## Features
 
-Keep up with the current progress at https://trello.com/b/ldJ8faYe
-
-### What's working
+This implementation should support all of the forms supported by the Clojure reader, including:
 
 - character
 - strings
@@ -32,8 +30,6 @@ Keep up with the current progress at https://trello.com/b/ldJ8faYe
 
 - records
 - tagged literals
-
-### What's left
 
 - fn reader
 - arg reader
