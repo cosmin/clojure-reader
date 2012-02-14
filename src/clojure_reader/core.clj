@@ -464,7 +464,29 @@
             args (get-args)]
         (list 'fn* args form)))))
 
-(defreader arg-reader)
+(defn register-arg [n]
+  (let [argsym *arg-env*]
+    (if (nil? argsym)
+      (throw (IllegalStateException. "arg literal not in #()"))
+      (let [ret (get argsym n)]
+        (if (nil? ret)
+          (let [ret (garg n)]
+            (var-set (var *arg-env*) (assoc *arg-env* n ret))
+            ret)
+          ret)))))
+
+(defreader arg-reader
+  (if (nil? *arg-env*)
+    (interpret-token (read-a-token reader \%))
+    (let [ch (.read reader)]
+      (.unread reader ch)
+      (if (or (eof? ch) (whitespace? ch) (terminating-macro? ch))
+        (register-arg 1)
+        (let [n (read reader true nil true)]
+          (cond (= '& n) (register-arg -1)
+                (not (instance? Number n)) (throw (IllegalStateException.
+                                                   "arg literal must be %, %& or %integer"))
+                :else (register-arg (int n))))))))
 
 (defreader eval-reader
   (if (not clojure.core/*read-eval*)

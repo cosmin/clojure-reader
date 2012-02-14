@@ -119,3 +119,6 @@
 
 (deftest test-fn-reader
   (is (= (cr/read-string "#(+ 1 2)") (clojure.core/read-string "#(+ 1 2)"))))
+
+(deftest test-arg-reader
+  (is (= 3 (apply (eval (cr/read-string "#(+ %1 %2)")) [1 2]))))
