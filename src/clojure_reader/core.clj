@@ -7,7 +7,7 @@
            [java.util ArrayList]
            [java.util.regex Pattern Matcher]
            [clojure.lang IFn RT Symbol Keyword IMeta IReference IObj Reflector Var]
-           [clojure.lang PersistentList PersistentHashSet LazilyPersistentVector PersistentTreeMap]
+           [clojure.lang PersistentList PersistentHashSet LazilyPersistentVector]
            [clojure.lang IPersistentMap IPersistentCollection IPersistentList]
            [clojure.lang LineNumberingPushbackReader LispReader$ReaderException]))
 
@@ -230,7 +230,7 @@
 (defn- seq-expand-list [lst]
   (doall (map (fn [item]
                 (cond
-                 (unquote? item) (RT/list 'clojure.core/list (second item))
+                 (unquote? item) (list 'clojure.core/list (second item))
                  (unquote-splicing? item) (second item)
                  :else (list 'clojure.core/list (syntax-quote item))
                  )
@@ -242,7 +242,7 @@
                           (seq-expand-list form)))]
     (if (nil? constructor)
       inner
-      (RT/list 'clojure.core/apply constructor inner))))
+      (list 'clojure.core/apply constructor inner))))
 
 (defn- syntax-quote-col [form]
   (cond
@@ -282,18 +282,18 @@
     (let [chr (.read reader)]
       (if (= \@ chr)
         (let [o (read reader true nil true)]
-          (RT/list clojure.core/unquote-splicing o))
+          (list clojure.core/unquote-splicing o))
         (do
           (unread reader chr)
           (let [o (read reader true nil true)]
-            (RT/list clojure.core/unquote o)))))))
+            (list clojure.core/unquote o)))))))
 
 (defreader list-reader
   (let [line (get-line-number reader)
         lst (read-delimited-list \) reader true)]
     (if (.isEmpty lst)
-      (PersistentList/EMPTY)
-      (let [s (PersistentList/create lst)]
+      (list)
+      (let [s (apply list lst)]
         (if (not= -1 line)
           (.withMeta s {:line line})
           s
@@ -379,7 +379,7 @@
             (throw (RuntimeException. (str "Unexpected number of constructor arguments to "
                                            record-class ": got " (alength record-entries))))
             (Reflector/invokeConstructor record-class record-entries)))
-        (let [vals (RT/map record-entries)]
+        (let [vals (make-map record-entries)]
           (doseq [k (keys vals)]
             (if (not (keyword? k))
               (throw (RuntimeException. (str "Unreadable defrecord form: "
@@ -437,7 +437,7 @@
 (defreader fn-reader
   (if (not-nil? *arg-env*)
     (throw (IllegalStateException. "Nested #()s are not allowed"))
-    (binding [*arg-env* (PersistentTreeMap/EMPTY)]
+    (binding [*arg-env* (sorted-map)]
       (unread reader ch)
       (let [form (read reader true nil true)
             args (get-args)]
@@ -502,20 +502,20 @@
   (throw (RuntimeException. "Unreadable form")))
 
 (defreader set-reader
-  (PersistentHashSet/createWithCheck (read-delimited-list \} reader true)))
+  (apply hash-set (read-delimited-list \} reader true)))
 
 (defreader vector-reader
-  (LazilyPersistentVector/create (read-delimited-list \] reader true)))
+  (apply vector (read-delimited-list \] reader true)))
 
 (defreader map-reader
   (let [read (read-delimited-list \} reader true)]
     (if (not= 0 (bit-and (.size read) 1))
       (throw (RuntimeException. "Map literal must contain an even number of forms"))
-      (RT/map (.toArray read)))))
+      (make-map (.toArray read)))))
 
 (defn make-wrapping-reader [^Symbol sym]
   (fn [^PushbackReader reader, ^Character ch]
-    (RT/list sym (read reader true nil true))))
+    (list sym (read reader true nil true))))
 
 (def quote-reader (make-wrapping-reader 'quote))
 (def deref-reader (make-wrapping-reader 'clojure.core/deref))

@@ -1,5 +1,6 @@
 (ns clojure-reader.util
   (:import [java.io PushbackReader]
+           [java.util ArrayList]
            [clojure.lang LineNumberingPushbackReader]))
 
 (defn not-nil? [val]
@@ -71,3 +72,13 @@
 
 (defn unread [^PushbackReader reader, chr]
   (.unread reader (int chr)))
+
+(def ^:dynamic *hashtable-threshold* 32)
+
+;; re-implementation of RT/map
+(defn make-map [array-contents]
+  (let [size (alength array-contents)]
+    (cond
+     (= 0 size) {}
+     (<= size *hashtable-threshold*) (apply array-map array-contents)
+     :else (apply hash-map array-contents))))
