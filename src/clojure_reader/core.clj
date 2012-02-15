@@ -168,7 +168,7 @@
     (if (instance? IMeta o)
       (if (instance? IReference o)
         (do (.resetMeta o meta) o)
-        (.withMeta o (merge (RT/meta o) meta)))
+        (with-meta o (merge (meta o) meta)))
       (throw (IllegalArgumentException. "Metadata can only be applied to IMetas")))))
 
 
@@ -208,7 +208,7 @@
 
          :else
          (if (not-nil? (namespace sym))
-           (let [maybe-class (.getMapping *ns* (symbol nil (.getNamespace sym)))]
+           (let [maybe-class (ns-resolve *ns* (symbol nil (namespace sym)))]
              (if (class? maybe-class)
                (symbol (.getName maybe-class) (name sym))
                (resolve-symbol sym)))
@@ -248,7 +248,7 @@
   (let [ret (cond
              (is-special form) (list 'quote form)
              (symbol? form) (syntax-quote-symbol form)
-             (unquote? form) (RT/second form)
+             (unquote? form) (second form)
              (unquote-splicing? form) (throw (IllegalStateException. "splice not in list"))
              (coll? form) (syntax-quote-col form)
              (or (keyword? form) (number? form)
@@ -465,7 +465,7 @@
        (symbol? o) (RT/classForName (str o))
        (list? o) (let [fs (first o)]
                    (cond
-                    (= fs 'var) (let [vs (second o)] (RT/var (namespace o) (name o)))
+                    (= fs 'var) (let [vs (second o)] (RT/var (namespace vs) (name vs)))
                     (.endsWith (name fs) ".") (let [args (RT/toArray (next o))]
                                                 (Reflector/invokeConstructor
                                                  (RT/classForName (slice (name fs) 0 -1))
@@ -475,7 +475,7 @@
                                                        (namespace fs)
                                                        (name fs)
                                                        args))
-                    :else (let [v (Compiler/maybeResolveIn *ns* fs)]
+                    :else (let [v (ns-resolve *ns* fs)]
                             (if (var? v)
                               (apply v (next o))
                               (throw (RuntimeException. (str "Can't resolve " fs)))))))
