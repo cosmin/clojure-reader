@@ -70,7 +70,9 @@
 
 (deftest test-reading-metadata
   (is (= {:foo true} (meta (cr/read-string "^:foo (1 2 3)"))))
-  (is (= {:a 1} (meta (cr/read-string "^{:a 1} (1 2 3)")))))
+  (is (= {:a 1} (meta (cr/read-string "^{:a 1} (1 2 3)"))))
+  (is (= {:tag "foo"} (meta (cr/read-string "^\"foo\" (1 2 3)"))))
+  (is (= {:tag 'java.util.ArrayList} (meta (cr/read-string "^java.util.ArrayList (1 2 3)")))))
 
 (deftest test-reading-strings
   (let [simple-string "\"abcd\""
