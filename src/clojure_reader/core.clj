@@ -14,8 +14,8 @@
 (declare read)
 (declare read-string)
 
-(def macros (make-array IFn 256))
-(def dispatch-macros (make-array IFn 256))
+(def ^:private macros (make-array IFn 256))
+(def ^:private dispatch-macros (make-array IFn 256))
 
 (defn- get-macro [ch]
   (if (< (int ch) (alength macros))
