@@ -52,21 +52,18 @@
       (loop [chr (read-one reader)]
         (if (whitespace? chr)
           (recur (read-one reader))
-          (if (= chr delim)
-            a
-            (do
-              (if (macro? chr)
-                (let [mret ((get-macro chr) reader chr)]
-                  (if (not= reader mret)
-                    (do (.add a mret)
-                        (recur (read-one reader)))
-                    (recur (read-one reader))))
-                (do
-                  (unread reader chr)
-                  (let [o (read reader true nil recursive?)]
-                    (if (not= reader o)
-                      (.add a o)))
-                  (recur (read-one reader)))))))))))
+          (cond
+           (= chr delim) a
+           (macro? chr) (let [mret ((get-macro chr) reader chr)]
+                          (if (not= reader mret)
+                            (do (.add a mret)
+                                (recur (read-one reader)))
+                            (recur (read-one reader))))
+           :else (do (unread reader chr)
+                     (let [o (read reader true nil recursive?)]
+                       (if (not= reader o)
+                         (.add a o)))
+                     (recur (read-one reader)))))))))
 
 (defmacro defreader [name & body]
   `(defn ~name ~[^PushbackReader 'reader, ^Character 'ch]
@@ -81,12 +78,11 @@
        (loop [uc 0 i offset]
          (if (= i (+ offset length))
            uc
-           (do
-             (let [ch (.charAt token i)
-                   d (char->digit ch base)]
-               (if (= -1 d)
-                 (throw (IllegalArgumentException. (str "Invalid digit: " ch)))
-                 (recur (+ d (* uc base)) (+ i 1)))))))))
+           (let [ch (.charAt token i)
+                 d (char->digit ch base)]
+             (if (= -1 d)
+               (throw (IllegalArgumentException. (str "Invalid digit: " ch)))
+               (recur (+ d (* uc base)) (+ i 1))))))))
   ([^PushbackReader reader,
      ^Character initch,
      base, length,
@@ -137,22 +133,16 @@
   (binding [*eof-msg* "EOF while reading string"]
     (let [sb (StringBuilder.)]
       (loop [chr (read-one reader)]
-        (if (= \" chr)
-          (.toString sb)
-          (if (not= \\ chr)
-            (do
-              (.append sb chr)
-              (recur (read-one reader)))
-            (let [echr (read-escaped-character reader)]
-              (.append sb echr)
-              (recur (read-one reader)))))))))
+        (cond (= \" chr) (.toString sb)
+              (not= \\ chr) (do (.append sb chr)
+                                (recur (read-one reader)))
+              :else (let [echr (read-escaped-character reader)]
+                      (.append sb echr)
+                      (recur (read-one reader))))))))
 
 (defreader comment-reader
   (loop [ch (.read reader)]
-    (if (not (or (eof? ch)
-                 (= \newline (char ch))
-                 (= \return (char ch))
-                 ))
+    (if (not (or (eof? ch) (= \newline (char ch)) (= \return (char ch))))
       (recur (.read reader))
       reader)))
 
@@ -201,12 +191,12 @@
            (if (nil? gmap)
              (throw (IllegalStateException. "Gensym literal not in syntax-quote"))
              (let [gs (gmap sym)]
-               (if (nil? gs)
+               (if (not-nil? gs)
+                 gs
                  (let [sym-name (str (slice (name sym) 0 -1) "__" (RT/nextID) "__auto__")
                        gs (symbol nil sym-name)]
                    (var-set (var *gensym-environment*) (assoc gmap sym gs))
-                   gs)
-                 gs))))
+                   gs)))))
 
          (and (nil? (namespace sym)) (.endsWith (name sym) "."))
          (let [csym (symbol nil (slice (name sym) 0 -1))
