@@ -269,7 +269,7 @@
 
 (defreader unquote-reader
   (binding [*eof-msg* "EOF while reading character"]
-    (let [chr (.read reader)]
+    (let [chr (read-one reader)]
       (if (= \@ chr)
         (let [o (read reader true nil true)]
           (list clojure.core/unquote-splicing o))
@@ -358,7 +358,7 @@
                                 \{ [\} false]
                                 \[ [\] true]
                                 (throw (RuntimeException. (str "Unreadable constructor form"
-                                                               "starting with \"#"
+                                                               " starting with \"#"
                                                                record-name chr "\""))))
           record-entries (.toArray (read-delimited-list endch reader true))
           all-ctors (.getConstructors record-class)]
