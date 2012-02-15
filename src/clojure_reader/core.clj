@@ -18,13 +18,11 @@
 (def dispatch-macros (make-array IFn 256))
 
 (defn- get-macro [ch]
-  (if (< ch (alength macros))
+  (if (< (int ch) (alength macros))
     (aget macros ch)))
 
 (defn- macro? [ch]
-  (and (< ch (alength macros))
-       (not-nil? (aget macros ch))
-       ))
+  (not-nil? (get-macro ch)))
 
 (defn- terminating-macro? [ch]
   (and (not (or (= \# (char ch))
@@ -41,35 +39,34 @@
           (.append sb (char ch))
           (recur (.read stream)))
         (do
-          (.unread stream ch)
+          (unread stream ch)
           (.toString sb))))))
 
 
 (defn read-delimited-list [^Character delim, ^PushbackReader reader, recursive?]
   (let [first-line (get-line-number reader)
         a (ArrayList.)]
-    (loop [ch (.read reader)]
-      (if (eof? ch)
-        (if (< first-line 0)
-          (throw (RuntimeException. "EOF while reading"))
-          (throw (RuntimeException. (str "EOF while reading, starting at line " first-line))))
-        (if (whitespace? ch)
-          (recur (.read reader))
-          (if (= (char ch) delim)
+    (binding [*eof-msg* (if (< first-line 0)
+                          "EOF while reading"
+                          (str "EOF while reading, starting at line " first-line))]
+      (loop [chr (read-one reader)]
+        (if (whitespace? chr)
+          (recur (read-one reader))
+          (if (= chr delim)
             a
             (do
-              (if (macro? ch)
-                (let [mret ((get-macro ch) reader (char ch))]
+              (if (macro? chr)
+                (let [mret ((get-macro chr) reader chr)]
                   (if (not= reader mret)
                     (do (.add a mret)
-                        (recur (.read reader)))
-                    (recur (.read reader))))
+                        (recur (read-one reader)))
+                    (recur (read-one reader))))
                 (do
-                  (.unread reader ch)
+                  (unread reader chr)
                   (let [o (read reader true nil recursive?)]
                     (if (not= reader o)
                       (.add a o)))
-                  (recur (.read reader)))))))))))
+                  (recur (read-one reader)))))))))))
 
 (defmacro defreader [name & body]
   `(defn ~name ~[^PushbackReader 'reader, ^Character 'ch]
@@ -102,7 +99,7 @@
             (let [ch (.read reader)]
               (if (or (eof? ch) (whitespace? (char ch)) (macro? ch))
                 (do
-                  (.unread reader ch)
+                  (unread reader ch)
                   (if (and exact? (not= length i))
                     (throw (IllegalArgumentException. (str "Invalid character length: " i ", should be: " length)))
                     uc
@@ -114,45 +111,41 @@
                     (recur (+ d (* uc base)) (+ i 1)))))))))))
 
 (defn read-escaped-character [^PushbackReader reader]
-  (let [ch (.read reader)]
-    (if (eof? ch)
-      (throw (RuntimeException. "EOF while reading string"))
-      (let [chr (char ch)]
-        (condp = chr
-          \t \tab
-          \r \return
-          \n \newline
-          \\ \\
-          \" \"
-          \b \backspace
-          \f \formfeed
-          \u
-          (let [ch (.read reader)]
-            (if (= -1 (char->digit ch 16))
-              (throw (RuntimeException. (str "Invalid unicode escape: \\u" (char ch))))
-              (read-unicode-char reader (char ch) 16 4 true)))
-          (if (digit? chr)
-            (let [uchr (read-unicode-char reader chr 8 3 false)]
-              (if (> uchr 0377)
-                (throw (RuntimeException. "Octal escape sequence must be in range [0, 377]."))
-                (char uchr)))
-            (throw (RuntimeException. (str "Unsupported escape character: \\" chr)))))))))
+  (binding [*eof-msg* "EOF while reading string"]
+    (let [chr (read-one reader)]
+      (condp = chr
+        \t \tab
+        \r \return
+        \n \newline
+        \\ \\
+        \" \"
+        \b \backspace
+        \f \formfeed
+        \u
+        (let [ch (.read reader)]
+          (if (= -1 (char->digit ch 16))
+            (throw (RuntimeException. (str "Invalid unicode escape: \\u" (char ch))))
+            (read-unicode-char reader (char ch) 16 4 true)))
+        (if (digit? chr)
+          (let [uchr (read-unicode-char reader chr 8 3 false)]
+            (if (> uchr 0377)
+              (throw (RuntimeException. "Octal escape sequence must be in range [0, 377]."))
+              (char uchr)))
+          (throw (RuntimeException. (str "Unsupported escape character: \\" chr))))))))
 
 (defreader string-reader
-  (let [sb (StringBuilder.)]
-    (loop [ch (.read reader)]
-      (if (eof? ch)
-        (throw (RuntimeException. "EOF while reading string"))
-        (let [chr (char ch)]
-          (if (= \" chr)
-            (.toString sb)
-            (if (not= \\ chr)
-              (do
-                (.append sb chr)
-                (recur (.read reader)))
-              (let [echr (read-escaped-character reader)]
-                (.append sb echr)
-                (recur (.read reader))))))))))
+  (binding [*eof-msg* "EOF while reading string"]
+    (let [sb (StringBuilder.)]
+      (loop [chr (read-one reader)]
+        (if (= \" chr)
+          (.toString sb)
+          (if (not= \\ chr)
+            (do
+              (.append sb chr)
+              (recur (read-one reader)))
+            (let [echr (read-escaped-character reader)]
+              (.append sb echr)
+              (recur (read-one reader)))))))))
 
 (defreader comment-reader
   (loop [ch (.read reader)]
@@ -285,14 +278,13 @@
       (syntax-quote form))))
 
 (defreader unquote-reader
-  (let [ch (.read reader)]
-    (if (eof? ch)
-      (throw (RuntimeException. "EOF while reading character"))
-      (if (= \@ (char ch))
+  (binding [*eof-msg* "EOF while reading character"]
+    (let [chr (.read reader)]
+      (if (= \@ chr)
         (let [o (read reader true nil true)]
           (RT/list clojure.core/unquote-splicing o))
         (do
-          (.unread reader ch)
+          (unread reader chr)
           (let [o (read reader true nil true)]
             (RT/list clojure.core/unquote o)))))))
 
@@ -308,10 +300,9 @@
           )))))
 
 (defreader character-reader
-  (let [ch (.read reader)]
-    (if (eof? ch)
-      (throw (RuntimeException. "EOF while reading character"))
-      (let [token (read-a-token reader (char ch))]
+  (binding [*eof-msg* "EOF while reading character"]
+    (let [chr (read-one reader)]
+      (let [token (read-a-token reader chr)]
         (if (= 1 (.length token))
           (Character/valueOf (.charAt token 0))
           (condp = token
@@ -344,66 +335,57 @@
 (declare ctor-reader)
 
 (defreader dispatch-reader
-  (loop [ch (.read reader)]
-    (if (eof? ch)
-      (throw (RuntimeException. "EOF while reading character"))
-      (let [dfn (aget dispatch-macros ch)
-            chr (char ch)]
-        (if (nil? dfn)
-          (do
-            (.unread reader ch)
-            (let [result (ctor-reader reader chr)]
-              (if (nil? result)
-                (throw (RuntimeException. (str "No dispatch macro for:" chr)))
-                result)))
-          (dfn reader (char ch)))))))
+  (binding [*eof-msg* "EOF while reading character"]
+    (loop [chr (read-one reader)
+           dfn (aget dispatch-macros chr)]
+      (if (nil? dfn)
+        (do
+          (unread reader chr)
+          (let [result (ctor-reader reader chr)]
+            (if (nil? result)
+              (throw (RuntimeException. (str "No dispatch macro for:" chr)))
+              result)))
+        (dfn reader chr)))))
 
 (defreader regex-reader
-  (let [sb (StringBuilder.)]
-    (loop [ch (.read reader)]
-      (if (eof? ch)
-        (throw (RuntimeException. "EOF while reading regex"))
-        (let [chr (char ch)]
-          (if (not= \" chr)
-            (do
-              (.append sb chr)
-              (if (= \\ chr)
-                (let [ch2 (.read reader)]
-                  (if (eof? ch2)
-                    (throw (RuntimeException. "EOF while reading regex"))
-                    (.append sb (char ch2)))))
-              (recur (.read reader)))
-            (Pattern/compile (.toString sb))))))))
+  (binding [*eof-msg* "EOF while reading regex"]
+    (let [sb (StringBuilder.)]
+      (loop [chr (read-one reader)]
+        (if (not= \" chr)
+          (do
+            (.append sb chr)
+            (if (= \\ chr)
+              (let [ch2 (read-one reader)]
+                (.append sb (char ch2))))
+            (recur (read-one reader)))
+          (Pattern/compile (.toString sb)))))))
 
 (defn- read-record [^PushbackReader reader, ^Symbol record-name]
-  (let [record-class (RT/classForName (.toString record-name))
-        ch (.read reader)]
-    (if (eof? ch)
-      (throw (RuntimeException. "EOF while reading constructor form"))
-      (let [chr (char ch)
-            [endch short-form?] (condp = chr
-                                  \{ [\} false]
-                                  \[ [\] true]
-                                  (throw (RuntimeException. (str "Unreadable constructor form"
-                                                                 "starting with \"#"
-                                                                 record-name chr "\""))))
-            record-entries (.toArray (read-delimited-list endch reader true))
-            all-ctors (.getConstructors record-class)
-            ]
-        (if short-form?
-          (let [matching-ctor #(= (alength record-entries) (alength (.getParameterTypes %1)))
-                ctor (first (filter matching-ctor all-ctors))]
-            (if (nil? ctor)
-              (throw (RuntimeException. (str "Unexpected number of constructor arguments to "
-                                             record-class ": got " (alength record-entries))))
-              (Reflector/invokeConstructor record-class record-entries)))
-          (let [vals (RT/map record-entries)]
-            (doseq [k (keys vals)]
-              (if (not (keyword? k))
-                (throw (RuntimeException. (str "Unreadable defrecord form: "
-                                               "key must be of type clojure.lang.Keyword, got "
-                                               k)))))
-            (Reflector/invokeStaticMethod record-class "create" (into-array Object [vals]))))))))
+  (binding [*eof-msg* "EOF while reading constructor form"]
+    (let [record-class (RT/classForName (.toString record-name))
+          chr (read-one reader)
+          [endch short-form?] (condp = chr
+                                \{ [\} false]
+                                \[ [\] true]
+                                (throw (RuntimeException. (str "Unreadable constructor form"
+                                                               "starting with \"#"
+                                                               record-name chr "\""))))
+          record-entries (.toArray (read-delimited-list endch reader true))
+          all-ctors (.getConstructors record-class)]
+      (if short-form?
+        (let [matching-ctor #(= (alength record-entries) (alength (.getParameterTypes %1)))
+              ctor (first (filter matching-ctor all-ctors))]
+          (if (nil? ctor)
+            (throw (RuntimeException. (str "Unexpected number of constructor arguments to "
+                                           record-class ": got " (alength record-entries))))
+            (Reflector/invokeConstructor record-class record-entries)))
+        (let [vals (RT/map record-entries)]
+          (doseq [k (keys vals)]
+            (if (not (keyword? k))
+              (throw (RuntimeException. (str "Unreadable defrecord form: "
+                                             "key must be of type clojure.lang.Keyword, got "
+                                             k)))))
+          (Reflector/invokeStaticMethod record-class "create" (into-array Object [vals])))))))
 
 (defn- get-data-reader [tag]
   (let [data-readers clojure.core/*data-readers*
@@ -456,7 +438,7 @@
   (if (not-nil? *arg-env*)
     (throw (IllegalStateException. "Nested #()s are not allowed"))
     (binding [*arg-env* (PersistentTreeMap/EMPTY)]
-      (.unread reader (int ch))
+      (unread reader ch)
       (let [form (read reader true nil true)
             args (get-args)]
         (list 'fn* args form)))))
@@ -476,7 +458,7 @@
   (if (nil? *arg-env*)
     (interpret-token (read-a-token reader \%))
     (let [ch (.read reader)]
-      (.unread reader ch)
+      (unread reader ch)
       (if (or (eof? ch) (whitespace? ch) (terminating-macro? ch))
         (register-arg 1)
         (let [n (read reader true nil true)]
@@ -577,13 +559,12 @@
         (do
           (.append sb (char ch))
           (recur (.read stream)))
-        (.unread stream ch)))
+        (unread stream ch)))
     (let [s (.toString sb)
           n (match-number s)]
       (if (nil? n)
         (throw (NumberFormatException. (str "Invalid number: " s)))
         n))))
-
 
 (defn read
   "Reads the next object from stream, which must be an instance of
@@ -613,10 +594,10 @@
             (plus-or-minus? ch) (let [ch2 (.read stream)]
                                   (if (digit? ch2)
                                     (do
-                                      (.unread stream ch2)
+                                      (unread stream ch2)
                                       (read-a-number stream ch))
                                     (do
-                                      (.unread stream ch2)
+                                      (unread stream ch2)
                                       (interpret-token (read-a-token stream ch)))))
             :else (interpret-token (read-a-token stream ch)))))
        (catch Exception e
