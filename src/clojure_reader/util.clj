@@ -60,6 +60,8 @@
 (defn eof? [ch]
   (or (= -1 ch) (= 65535 ch)))
 
+(def ^:dynamic *replace-eof-with* nil)
+
 (def ^:dynamic *eof-msg* "EOF while reading")
 
 (defn read-one
@@ -67,7 +69,9 @@
   ([^PushbackReader stream, ^String eof-error-message]
      (let [ch (.read stream)]
        (if (eof? ch)
-         (throw (RuntimeException. eof-error-message))
+         (if (nil? *replace-eof-with*)
+           (throw (RuntimeException. eof-error-message))
+           *replace-eof-with*)
          (char ch)))))
 
 (defn unread [^PushbackReader reader, chr]

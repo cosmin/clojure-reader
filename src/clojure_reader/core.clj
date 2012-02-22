@@ -17,6 +17,8 @@
 (def ^:private macros (make-array IFn 256))
 (def ^:private dispatch-macros (make-array IFn 256))
 
+(def ^:dynamic *allow-incomplete-read* true)
+
 (defn- get-macro [ch]
   (if (< (int ch) (alength macros))
     (aget macros ch)))
@@ -48,7 +50,9 @@
         a (ArrayList.)]
     (binding [*eof-msg* (if (< first-line 0)
                           "EOF while reading"
-                          (str "EOF while reading, starting at line " first-line))]
+                          (str "EOF while reading, starting at line " first-line))
+              *replace-eof-with* (if *allow-incomplete-read* delim nil)
+              ]
       (loop [chr (read-one reader)]
         (if (whitespace? chr)
           (recur (read-one reader))
@@ -107,7 +111,7 @@
                     (recur (+ d (* uc base)) (+ i 1)))))))))))
 
 (defn read-escaped-character [^PushbackReader reader]
-  (binding [*eof-msg* "EOF while reading string"]
+  (binding [*eof-msg* "EOF"]
     (let [chr (read-one reader)]
       (condp = chr
         \t \tab
@@ -130,7 +134,8 @@
           (throw (RuntimeException. (str "Unsupported escape character: \\" chr))))))))
 
 (defreader string-reader
-  (binding [*eof-msg* "EOF while reading string"]
+  (binding [*eof-msg* "EOF while reading string"
+            *replace-eof-with* (if *allow-incomplete-read* \" nil)]
     (let [sb (StringBuilder.)]
       (loop [chr (read-one reader)]
         (cond (= \" chr) (.toString sb)
@@ -264,18 +269,19 @@
 
 (defreader syntax-quote-reader
   (binding [*gensym-environment* {}]
-    (let [form (read reader true nil true)]
+    (let [form (read reader (not *allow-incomplete-read*) nil true)]
       (syntax-quote form))))
 
 (defreader unquote-reader
-  (binding [*eof-msg* "EOF while reading character"]
+  (binding [*eof-msg* "EOF while reading character"
+            *replace-eof-with* (if *allow-incomplete-read* \space nil)]
     (let [chr (read-one reader)]
       (if (= \@ chr)
-        (let [o (read reader true nil true)]
+        (let [o (read reader (not *allow-incomplete-read*) () true)]
           (list clojure.core/unquote-splicing o))
         (do
           (unread reader chr)
-          (let [o (read reader true nil true)]
+          (let [o (read reader (not *allow-incomplete-read*) nil true)]
             (list clojure.core/unquote o)))))))
 
 (defreader list-reader
@@ -351,7 +357,8 @@
           (Pattern/compile (.toString sb)))))))
 
 (defn- read-record [^PushbackReader reader, ^Symbol record-name]
-  (binding [*eof-msg* "EOF while reading constructor form"]
+  (binding [*eof-msg* "EOF while reading constructor form"
+            *replace-eof-with* (if *allow-incomplete-read* \[ nil)]
     (let [record-class (RT/classForName (.toString record-name))
           chr (read-one reader)
           [endch short-form?] (condp = chr
@@ -482,7 +489,7 @@
        :else (throw (IllegalArgumentException. "Unsupported #= form"))))))
 
 (defreader discard-reader
-  (read reader true nil true)
+  (read reader (not *allow-incomplete-read*) nil true)
   reader)
 
 (defreader unmatched-delimiter-reader
@@ -500,12 +507,16 @@
 (defreader map-reader
   (let [read (read-delimited-list \} reader true)]
     (if (not= 0 (bit-and (.size read) 1))
-      (throw (RuntimeException. "Map literal must contain an even number of forms"))
+      (if *allow-incomplete-read*
+        (do
+          (.add read nil)
+          (make-map (.toArray read)))
+        (throw (RuntimeException. "Map literal must contain an even number of forms")))
       (make-map (.toArray read)))))
 
 (defn make-wrapping-reader [^Symbol sym]
   (fn [^PushbackReader reader, ^Character ch]
-    (list sym (read reader true nil true))))
+    (list sym (read reader (not *allow-incomplete-read*) nil true))))
 
 (def quote-reader (make-wrapping-reader 'quote))
 (def deref-reader (make-wrapping-reader 'clojure.core/deref))
@@ -600,4 +611,4 @@
   "Reads one object from the supplied string"
   ([s]
      (let [stream (PushbackReader. (StringReader. s))]
-       (read stream true nil false))))
+       (read stream (not *allow-incomplete-read*) nil false))))
