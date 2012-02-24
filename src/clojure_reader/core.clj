@@ -17,7 +17,7 @@
 (def ^:private macros (make-array IFn 256))
 (def ^:private dispatch-macros (make-array IFn 256))
 
-(def ^:dynamic *allow-incomplete-read* true)
+(def ^:dynamic *allow-incomplete-read* false)
 
 (defn- get-macro [ch]
   (if (< (int ch) (alength macros))
